@@ -1,2 +1,2 @@
-['hi', 'mhi'] [<lnB>_1, <lnB>_2, ...] = [ 0.  0.]
-['hi', 'mhi'] [DECI_1, DECI_2, ...] = [ 0.  0.]
+['hi', 'mhi'] [<lnB>_1, <lnB>_2, ...] = [ nan  nan]
+['hi', 'mhi'] [DECI_1, DECI_2, ...] = [ 0.    0.92]

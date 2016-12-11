@@ -27,6 +27,10 @@ class foxi:
         self.source_directory = 'foxisource/'   
         self.gaussian_forecast
         self.flashy_foxi
+        self.set_column_types
+        self.column_types = []
+        self.column_functions 
+        self.column_types_are_set = False
 
 
     def set_chains(self,name_of_chains): 
@@ -37,6 +41,19 @@ class foxi:
     def set_model_name_list(self,model_name_list): 
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
+
+
+    def set_column_types(self,column_types):
+    # Input a list of strings to set the type of column transformation in both prior and data chains i.e. flat, log, log10, ...
+        self.column_types = column_types
+        self.column_types_are_set = True # All columns are as input unless this is True
+
+
+    def column_functions(self,i,input_value):
+    # Choose to transform whichever column
+        if self.column_types[i] == 'flat': return input_value
+        if self.column_types[i] == 'log': return np.log(input_value)
+        if self.column_types[i] == 'log10': return np.log10(input_value)
 
 
     def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_points,error_vector):
@@ -77,18 +94,19 @@ class foxi:
             with open(self.path_to_foxi_directory + '/' + self.priors_directory + 'bayesinf_' + self.model_name_list[i] + '.txt') as file:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
                 for line in file:
-                    while running_total < number_of_points:
-                        columns = line.split()
-                        prior_point_vector = [] 
-                        for number in prior_column_numbers[i]: # Take a prior point 
-                            prior_point_vector.append(float(columns[number]))
-                        E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) 
-                        # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                        running_total+=1 # Also add to the running total                         
+                    columns = line.split()
+                    prior_point_vector = [] 
+                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                        if self.column_types_are_set == True: prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]])))
+                        if self.column_types_are_set == False: prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) 
+                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                    running_total+=1 # Also add to the running total                         
+                    if running_total >= number_of_points: break # Finish once reached specified number of prior points
 
-        for j in range(0,len(self.model_name_list)-1):
-            lnB[j] = np.log10(E[j]) - np.log10(E[0]) # Compute log Bayes factor utility
-            if np.log10(E[j]) - np.log10(E[0]) <= -5.0:
+        for j in range(0,len(self.model_name_list)):  
+            lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
+            if np.log(E[j]) - np.log(E[0]) <= -5.0:
                 if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
  
         return [lnB,decisivity] # Output both utilities        
@@ -164,17 +182,17 @@ class foxi:
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
-                while running_total < number_of_points:
-                # Continue for as long as needed
-                    columns = line.split()
-                    fiducial_point_vector = [] 
-                    for number in chains_column_numbers:
-                        fiducial_point_vector.append(float(columns[number]))
-                    if foxi_mode == 'deci_ExlnB': # Decide on which quantity(ies) to calculate
-                        [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
-                        decisivity = decisivity + deci 
-                        expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
-                    running_total+=1 # Also add to the running total
+                columns = line.split()
+                fiducial_point_vector = [] 
+                for j in range(0,len(chains_column_numbers)):
+                    if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
+                    if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
+                if foxi_mode == 'deci_ExlnB': # Decide on which quantity(ies) to calculate
+                    [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
+                    decisivity = decisivity + deci 
+                    expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_points: break # Finish once reached specified number of data points 
         
         if foxi_mode == 'deci_ExlnB':
             expected_lnB /= float(number_of_points)

@@ -18,6 +18,7 @@ class foxi:
         self.set_model_name_list
         self.decisivity_lnB_utility_functions
         self.jensen_shannon_div_utility_function
+        self.information_radius_utility_function
         self.foxi_mode = 'null'
         self.run_foxi
         self.chains_directory = 'foxichains/'
@@ -31,6 +32,9 @@ class foxi:
         self.column_types = []
         self.column_functions 
         self.column_types_are_set = False
+        self.evaluate_Fab
+        self.evaluate_Sabc
+        self.evaluate_Qabcd
 
 
     def set_chains(self,name_of_chains): 
@@ -55,8 +59,35 @@ class foxi:
         if self.column_types[i] == 'log': return np.log(input_value)
         if self.column_types[i] == 'log10': return np.log10(input_value)
 
+    
+    def evaluate_Fab(self,current_data_central_point_vector,stepsize):
+    # Compute the Fisher matrix (or 1st approximation) from the likelihood chains which can be used to efficiently evaluate the Kullback-Leibler divergence utility
+        differences = np.zeros(len(chains_column_numbers)) # Initialise the array of zeros for the differences summation
+        first_deriv_differences = []
+        for i in range(0,len(chains_column_numbers)): first_deriv_differences.append(np.zeros(len(chains_column_numbers))) # Initialise zeros for derivatives
+        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector = [] 
+                for j in range(0,len(chains_column_numbers)):
+                    if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
+                    if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
+                differences += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector)
+                for i in range(0,len(chains_column_numbers)): first_deriv_differences[i] += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector) - (stepsize*np.asarray(current_data_central_point_vector)) # Compute first dervative differences 
+        differences_trans = differences.T
+        first_deriv_differences_trans = [first_deriv_differences[i].T for i in range(0,len(chains_column_numbers))]
+        # Central and first derivative differences
+        covmat = differences*differences_trans
+        covmat_change = [first_deriv_differences[i]*first_deriv_differences_trans[i] for i in range(0,len(chains_column_numbers))]
+        first_deriv_covmat = [covmat_change[i] - covmat for i in range(0,len(chains_column_numbers))]
+        # Central and first derivative covariance matrices
+        inverse_covmat = np.linalg.inv(covmat)
+        Fab = [[0.5*np.sum(inverse_covmat*first_deriv_covmat[i]*inverse_covmat*first_deriv_covmat[i]) for i in range(0,len(chains_column_numbers))] for j in range(0,len(chains_column_numbers))]  # Fisher matrix calculation  
+        return Fab
 
-    def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_points,error_vector):
+
+    def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector):
     # The decisivity and lnB utility functions defined in arxiv:1639.3933, but first used in arxiv:1012.3195
         '''
         Inputs to decisivity_utility_function:       
@@ -73,7 +104,7 @@ class foxi:
                                             be in the same order as all other structures.
 
 
-        number_of_points                 =  The number of points specified to be read off from the prior values.
+        number_of_prior_points           =  The number of points specified to be read off from the prior values.
 
 
         error_vector                     =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
@@ -102,7 +133,7 @@ class foxi:
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) 
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
                     running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_points: break # Finish once reached specified number of prior points
+                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
         for j in range(0,len(self.model_name_list)):  
             lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
@@ -115,6 +146,45 @@ class foxi:
     def jensen_shannon_div_utility_function(self): 
     # A utility based on the total Jensen-Shannon divergence introduced in arxiv:1606.06758
         return 1.0
+
+    
+    def information_radius_utility_function(self,fiducial_point_vector,error_vector,current_data_central_point_vector,current_data_error_vector):
+        # The information radius utility function defined in arxiv:1639.3933
+        '''
+        Inputs to decisivity_utility_function:       
+
+
+        fiducial_point_vector              =  Forecast distribution fiducial central values
+
+
+        forecast_data_function             =  A function like gaussian_forecast
+
+
+        current_data_central_point_vector  =
+
+         
+        current_data_error_vector          =
+  
+
+        error_vector                       =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
+
+
+        '''
+
+        fisher_metric = np.zeros(len(error_vector),len(error_vector))
+        delta_full_coordinates = np.zeros(2*len(error_vector))
+
+        for i in range(0,2*len(error_vector)):
+            if i < len(error_vector): 
+                fisher_metric[i,i] = 1.0/(current_data_error_vector**2.0)
+                delta_full_coordinates = (fiducial_point_vector[i]-current_data_central_point_vector[i])
+            if i >= len(error_vector): 
+                fisher_metric[i,i] = 1.0/(2.0*(current_data_error_vector**4.0))
+                delta_full_coordinates = (error_vector[i]-current_data_error_vector[i])
+
+        information_radius = (1.0/8.0)*(sum((delta_full_coordinates.T)*fisher_metric*(delta_full_coordinates)))
+ 
+        return information_radius # Output the IRad
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):

@@ -70,10 +70,10 @@ class foxi:
 
         prior_column_numbers             =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
                                             correspond to the parameters of interest, starting with 0. These should 
-                                            be in the same order as all other structures.
+                                            be in the same order as all other structures
 
 
-        number_of_prior_points           =  The number of points specified to be read off from the prior values.
+        number_of_prior_points           =  The number of points specified to be read off from the prior values
 
 
         error_vector                     =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
@@ -118,29 +118,31 @@ class foxi:
         DKL_utility_function: 
 
         
-        chains_column_numbers              =  A list of the numbers of the columns in the chains that correspond to
-                                              the parameters of interest, starting with 0. These should be in the same
-                                              order as all other structures.      
+        chains_column_numbers                  =  A list of the numbers of the columns in the chains that correspond to
+                                                  the parameters of interest, starting with 0. These should be in the same
+                                                  order as all other structures 
 
 
-        fiducial_point_vector              =  Forecast distribution fiducial central values
+        fiducial_point_vector                  =  Forecast distribution fiducial central values
 
 
-        forecast_data_function             =  A function like gaussian_forecast
+        forecast_data_function                 =  A function like gaussian_forecast
 
         
-        number_of_points                   =  The number of points specified to be read off from the current data chains.
+        number_of_points                       =  The number of points specified to be read off from the current data chains
 
 
-        error_vector                       =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
+        error_vector                           =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
 
 
         '''
 
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
+        forecast_data_function_normalisation = 0.0
+        # Initialise the normalisation for the forecast data
 
-        running_total = 0 # Initialize a running total of points read in from the prior
+        running_total = 0 # Initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -149,13 +151,26 @@ class foxi:
                 fiducial_point_vector_for_integral = [] 
                 for j in range(0,len(chains_column_numbers)):
                     if self.column_types_are_set == True: fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
-                DKL += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)*np.log(float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector))
-                # Calculate the contribution to the DKL integral
+                    if self.column_types_are_set == False: fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
+                forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return DKL # Output DKL
+        running_total = 0 # Initialize a running total of points read in from the chains
+
+        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector_for_integral = [] 
+                for j in range(0,len(chains_column_numbers)):
+                    if self.column_types_are_set == True: fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
+                    if self.column_types_are_set == False: fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
+                DKL += (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)
+                running_total+=1 # Also add to the running total                         
+                if running_total >= number_of_points: break # Finish once reached specified number points
+
+        return DKL # Output normalised DKL
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -175,24 +190,25 @@ class foxi:
 
         chains_column_numbers      =  A list of the numbers of the columns in the chains that correspond to
                                       the parameters of interest, starting with 0. These should be in the same
-                                      order as all other structures.
+                                      order as all other structures
 
 
         prior_column_numbers       =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
                                       correspond to the parameters of interest, starting with 0. These should 
-                                      be in the same order as all other structures.       
+                                      be in the same order as all other structures   
 
 
-        number_of_points           =  The number of points specified to be read off from the current data chains.
+        number_of_points           =  The number of points specified to be read off from the current data chains
 
 
-        number_of_prior_points     =  The number of points specified to be read off from the prior.
+        number_of_prior_points     =  The number of points specified to be read off from the prior
 
 
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector. 
+        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector
 
 
         '''
+
         self.flashy_foxi() # Display propaganda      
 
         forecast_data_function = self.gaussian_forecast # Change the forecast data function here (if desired)
@@ -208,7 +224,7 @@ class foxi:
         expected_lnB = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the expected log Bayes factor for the number of models (reference model is element 0)
         expected_DKL = 0.0
-        # Initialize the count for expected Kullback-Leibler divergence
+        # Initialize the count for expected Kullback-Leibler divergence     
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -217,7 +233,7 @@ class foxi:
                 fiducial_point_vector = [] 
                 for j in range(0,len(chains_column_numbers)):
                     if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
+                    if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
                 [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
                 DKL = self.DKL_utility_function(chains_column_numbers,fiducial_point_vector,forecast_data_function,number_of_points,error_vector)
                 decisivity = decisivity + deci 

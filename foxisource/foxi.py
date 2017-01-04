@@ -17,8 +17,7 @@ class foxi:
         self.set_chains
         self.set_model_name_list
         self.decisivity_lnB_utility_functions
-        self.jensen_shannon_div_utility_function
-        self.information_radius_utility_function
+        self.DKL_utility_function
         self.foxi_mode = 'null'
         self.run_foxi
         self.chains_directory = 'foxichains/'
@@ -32,9 +31,6 @@ class foxi:
         self.column_types = []
         self.column_functions 
         self.column_types_are_set = False
-        self.evaluate_Fab
-        #self.evaluate_Sabc
-        #self.evaluate_Qabcd
 
 
     def set_chains(self,name_of_chains): 
@@ -48,74 +44,16 @@ class foxi:
 
 
     def set_column_types(self,column_types):
-    # Input a list of strings to set the type of column transformation in both prior and data chains i.e. flat, log, log10, ...
+    # Input a list of strings to set the format of each column in both prior and data chains i.e. flat, log, log10, ...
         self.column_types = column_types
         self.column_types_are_set = True # All columns are as input unless this is True
 
 
     def column_functions(self,i,input_value):
-    # Choose to transform whichever column
+    # Choose to transform whichever column according to its format
         if self.column_types[i] == 'flat': return input_value
-        if self.column_types[i] == 'log': return np.log(input_value)
-        if self.column_types[i] == 'log10': return np.log10(input_value)
-
-    
-    def evaluate_Fab(self,chains_column_numbers,current_data_central_point_vector,stepsizes,number_of_points):
-    # Compute the Fisher matrix (or 1st approximation) from the likelihood chains which can be used to efficiently evaluate the Kullback-Leibler divergence utility
-        '''
-        Inputs to evaluate_Fab:       
-
-
-        chains_column_numbers              =  A list of the numbers of the columns in the chains that correspond to
-                                              the parameters of interest, starting with 0. These should be in the same
-                                              order as all other structures.
-     
-
-        current_data_central_point_vector  = 
-
-        
-        stepsizes                          = 
-
-
-        number_of_points                   =  The number of points specified to be read off from the current data chains.        
-
-
-        '''
-
-        differences = np.zeros(len(chains_column_numbers)) # Initialise the array of zeros for the differences summation
-        first_deriv_differences = []
-        for i in range(0,len(chains_column_numbers)): first_deriv_differences.append(np.zeros(len(chains_column_numbers))) # Initialise zeros for derivatives
-        
-        running_total = 0 # Initialize a running total of points read in from the chains
-
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                fiducial_point_vector = [] 
-                for j in range(0,len(chains_column_numbers)):
-                    if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
-                differences += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector)
-                for i in range(0,len(chains_column_numbers)): first_deriv_differences[i] += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector) - np.asarray(stepsizes) # Compute first dervative differences 
-                running_total+=1 # Also add to the running total
-                if running_total >= number_of_points: break # Finish once reached specified number of data points 
-
-        covmat = np.array([[differences[i]*differences[j]/float(number_of_points) for j in range(0,len(chains_column_numbers))] for i in range(0,len(chains_column_numbers))])
-        covmat_change = [np.array([[first_deriv_differences[i][k]*first_deriv_differences[j][k]/float(number_of_points) for j in range(0,len(chains_column_numbers))] for i in range(0,len(chains_column_numbers))]) for k in range(0,len(chains_column_numbers))]
-        first_deriv_covmat = [covmat_change[i] - covmat for i in range(0,len(chains_column_numbers))]
-        # Central and first derivative covariance matrices
-
-        inverse_covmat = np.linalg.inv(covmat)
-        Fab = [[0.5*np.sum(inverse_covmat*first_deriv_covmat[i]*inverse_covmat*first_deriv_covmat[i]) for i in range(0,len(chains_column_numbers))] for j in range(0,len(chains_column_numbers))]  # Fisher matrix calculation  
-
-        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout_likelihood_Fab.txt",'w') 
-        for i in range(0,len(Fab[0])): 
-            for j in range(0,len(Fab[0])):     
-                output_data_file.write(str(Fab[i][j]) + "\t")
-            output_data_file.write("\n")
-        output_data_file.close()
-        # Output to a newly created data file
+        if self.column_types[i] == 'log': return np.exp(input_value)
+        if self.column_types[i] == 'log10': return 10.0**(input_value)
 
 
     def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector):
@@ -173,16 +111,16 @@ class foxi:
  
         return [lnB,decisivity] # Output both utilities        
 
-
-    def jensen_shannon_div_utility_function(self): 
-    # A utility based on the total Jensen-Shannon divergence introduced in arxiv:1606.06758
-        return 1.0
-
     
-    def information_radius_utility_function(self,fiducial_point_vector,error_vector,current_data_central_point_vector,current_data_error_vector):
-        # The information radius utility function defined in arxiv:1639.3933
+    def DKL_utility_function(self,chains_column_numbers,fiducial_point_vector,forecast_data_function,number_of_points,error_vector):
+    # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
-        Inputs to decisivity_utility_function:       
+        DKL_utility_function: 
+
+        
+        chains_column_numbers              =  A list of the numbers of the columns in the chains that correspond to
+                                              the parameters of interest, starting with 0. These should be in the same
+                                              order as all other structures.      
 
 
         fiducial_point_vector              =  Forecast distribution fiducial central values
@@ -190,32 +128,34 @@ class foxi:
 
         forecast_data_function             =  A function like gaussian_forecast
 
+        
+        number_of_points                   =  The number of points specified to be read off from the current data chains.
 
-        current_data_central_point_vector  =
-
-         
-        current_data_error_vector          =
-  
 
         error_vector                       =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
 
 
         '''
 
-        fisher_metric = np.zeros(len(error_vector),len(error_vector))
-        delta_full_coordinates = np.zeros(2*len(error_vector))
+        DKL = 0.0
+        # Initialise the integral count Kullback-Leibler divergence at 0.0
 
-        for i in range(0,2*len(error_vector)):
-            if i < len(error_vector): 
-                fisher_metric[i,i] = 1.0/(current_data_error_vector**2.0)
-                delta_full_coordinates = (fiducial_point_vector[i]-current_data_central_point_vector[i])
-            if i >= len(error_vector): 
-                fisher_metric[i,i] = 1.0/(2.0*(current_data_error_vector**4.0))
-                delta_full_coordinates = (error_vector[i]-current_data_error_vector[i])
+        running_total = 0 # Initialize a running total of points read in from the prior
 
-        information_radius = (1.0/8.0)*(sum((delta_full_coordinates.T)*fisher_metric*(delta_full_coordinates)))
- 
-        return information_radius # Output the IRad
+        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector_for_integral = [] 
+                for j in range(0,len(chains_column_numbers)):
+                    if self.column_types_are_set == True: fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
+                    if self.column_types_are_set == False: fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
+                DKL += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)*np.log(float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector))
+                # Calculate the contribution to the DKL integral
+                running_total+=1 # Also add to the running total                         
+                if running_total >= number_of_points: break # Finish once reached specified number points
+
+        return DKL # Output DKL
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -224,10 +164,10 @@ class foxi:
         prior_point_vector = np.asarray(prior_point_vector) 
         fiducial_point_vector = np.asarray(fiducial_point_vector)      
         error_vector = np.asarray(error_vector)
-        return (1.0/np.sqrt(2.0*np.pi))*np.exp(-(0.5*sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))-sum(np.log(error_vector)))
+        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
 
 
-    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,foxi_mode='deci_ExlnB'): 
+    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 
     # This is the main algorithm to compute expected utilites and compute other quantities
         ''' 
         Quick usage and settings:
@@ -249,18 +189,7 @@ class foxi:
         number_of_prior_points     =  The number of points specified to be read off from the prior.
 
 
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector.
-
-        
-        foxi_mode                   = 'Exjsd'             - Sets up foxi to compute just the total expected
-                                                            Jensen-Shannon divergence between all models in 
-                                                            model_name_list.
-                                      'deci_ExlnB'        - Sets up foxi to compute both the decisivity and 
-                                                            expected log Bayes factor utilities where we
-                                                            set model_name_list[0] as the reference model.
-                                      'deci_ExlnB_Exjsd'  - Sets up foxi to compute 'deci_ExlnB' and 'Exjsd'.
-
-                                      < Default >         - This is set to 'deci_ExlnB'. 
+        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector. 
 
 
         '''
@@ -270,15 +199,16 @@ class foxi:
 
         running_total = 0 # Initialize a running total of points read in from the chains
 
-        if foxi_mode == 'deci_ExlnB':
-            deci = np.zeros(len(self.model_name_list))
-            # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-            lnB = np.zeros(len(self.model_name_list))
-            # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
-            decisivity = np.zeros(len(self.model_name_list))
-            # Initialize an array of values of the full decisivity for the number of models (reference model is element 0)
-            expected_lnB = np.zeros(len(self.model_name_list))
-            # Initialize an array of values of the expected log Bayes factor for the number of models (reference model is element 0)
+        deci = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
+        lnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
+        decisivity = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the full decisivity for the number of models (reference model is element 0)
+        expected_lnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the expected log Bayes factor for the number of models (reference model is element 0)
+        expected_DKL = 0.0
+        # Initialize the count for expected Kullback-Leibler divergence
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -288,20 +218,22 @@ class foxi:
                 for j in range(0,len(chains_column_numbers)):
                     if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
-                if foxi_mode == 'deci_ExlnB': # Decide on which quantity(ies) to calculate
-                    [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
-                    decisivity = decisivity + deci 
-                    expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
+                [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
+                DKL = self.DKL_utility_function(chains_column_numbers,fiducial_point_vector,forecast_data_function,number_of_points,error_vector)
+                decisivity = decisivity + deci 
+                expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
+                expected_DKL += DKL
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
         
-        if foxi_mode == 'deci_ExlnB':
-            expected_lnB /= float(number_of_points)
-            decisivity /= float(number_of_points) # Normalise outputs
-            output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout_deci_ExlnB.txt",'w') 
-            output_data_file.write(str(self.model_name_list) + ' [<lnB>_1, <lnB>_2, ...] = ' + str(expected_lnB) + "\n")
-            output_data_file.write(str(self.model_name_list) + ' [DECI_1, DECI_2, ...] = ' + str(decisivity))
-            output_data_file.close()
+        expected_lnB /= float(number_of_points)
+        decisivity /= float(number_of_points) 
+        expected_DKL /= float(number_of_points) # Normalise outputs
+        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout.txt",'w') 
+        output_data_file.write(str(self.model_name_list) + ' [<lnB>_1, <lnB>_2, ...] = ' + str(expected_lnB) + "\n")
+        output_data_file.write(str(self.model_name_list) + ' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
+        output_data_file.write('<DKL> = ' + str(expected_DKL))
+        output_data_file.close()
 
 
     def flashy_foxi(self): # Just some front page propaganda...

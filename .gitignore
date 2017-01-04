@@ -1,6 +1,14 @@
-git_update.bash
-foxichains/bayesinf_likemod.txt
 foxipriors/bayesinf_hi.txt
 foxipriors/bayesinf_mhi.txt
+foxipriors/bayesinf_ai.txt
+git_update.bash
+foxichains/bayesinf_likemod.txt
+foxipriors/bayesinf_bi.txt
+foxipriors/bayesinf_kklti.txt
+foxipriors/bayesinf_kmii.txt
+foxipriors/bayesinf_kmiii.txt
+foxipriors/bayesinf_li.txt
+foxipriors/bayesinf_rchi.txt
+foxipriors/bayesinf_rgi.txt
 foxiscripts/run_hi_mhi.py
 TODO

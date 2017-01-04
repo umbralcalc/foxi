@@ -16,8 +16,7 @@ class foxi:
         self.model_name_list = [] 
         self.set_chains
         self.set_model_name_list
-        self.decisivity_lnB_utility_functions
-        self.DKL_utility_function
+        self.utility_functions
         self.foxi_mode = 'null'
         self.run_foxi
         self.chains_directory = 'foxichains/'
@@ -56,66 +55,13 @@ class foxi:
         if self.column_types[i] == 'log10': return 10.0**(input_value)
 
 
-    def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector):
-    # The decisivity and lnB utility functions defined in arxiv:1639.3933, but first used in arxiv:1012.3195
-        '''
-        Inputs to decisivity_utility_function:       
-
-
-        fiducial_point_vector            =  Forecast distribution fiducial central values
-
-
-        forecast_data_function           =  A function like gaussian_forecast
-
-
-        prior_column_numbers             =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
-                                            correspond to the parameters of interest, starting with 0. These should 
-                                            be in the same order as all other structures
-
-
-        number_of_prior_points           =  The number of points specified to be read off from the prior values
-
-
-        error_vector                     =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
-
-
-        '''
-        
-        decisivity = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the decisivity for the number of models (reference model is element 0)
-        E = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the Bayesian evidence for the number of models (reference model is element 0)
-        lnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
-
-        running_total = 0 # Initialize a running total of points read in from the prior
-
-        for i in range(0,len(self.model_name_list)):
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + 'bayesinf_' + self.model_name_list[i] + '.txt') as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                for line in file:
-                    columns = line.split()
-                    prior_point_vector = [] 
-                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                        if self.column_types_are_set == True: prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]])))
-                        if self.column_types_are_set == False: prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
-                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) 
-                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                    running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
-
-        for j in range(0,len(self.model_name_list)):  
-            lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
-            if np.log(E[j]) - np.log(E[0]) <= -5.0:
-                if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
- 
-        return [lnB,decisivity] # Output both utilities        
-
-    
-    def DKL_utility_function(self,chains_column_numbers,fiducial_point_vector,forecast_data_function,number_of_points,error_vector):
+    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector):
     # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
         DKL_utility_function: 
+
+
+        fiducial_point_vector                  =  Forecast distribution fiducial central values
 
         
         chains_column_numbers                  =  A list of the numbers of the columns in the chains that correspond to
@@ -123,7 +69,9 @@ class foxi:
                                                   order as all other structures 
 
 
-        fiducial_point_vector                  =  Forecast distribution fiducial central values
+        prior_column_numbers                   =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
+                                                  correspond to the parameters of interest, starting with 0. These should 
+                                                  be in the same order as all other structures      
 
 
         forecast_data_function                 =  A function like gaussian_forecast
@@ -131,12 +79,20 @@ class foxi:
         
         number_of_points                       =  The number of points specified to be read off from the current data chains
 
+        
+        number_of_prior_points                 =  The number of points specified to be read off from the prior
+
 
         error_vector                           =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
 
 
         '''
-
+        decisivity = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the decisivity for the number of models (reference model is element 0)
+        E = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the Bayesian evidence for the number of models (reference model is element 0)
+        lnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
         forecast_data_function_normalisation = 0.0
@@ -156,6 +112,27 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
+        running_total = 0 # Initialize a running total of points read in from the prior
+
+        for i in range(0,len(self.model_name_list)):
+            with open(self.path_to_foxi_directory + '/' + self.priors_directory + 'bayesinf_' + self.model_name_list[i] + '.txt') as file:
+            # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                for line in file:
+                    columns = line.split()
+                    prior_point_vector = [] 
+                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                        if self.column_types_are_set == True: prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]])))
+                        if self.column_types_are_set == False: prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/forecast_data_function_normalisation 
+                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                    running_total+=1 # Also add to the running total                         
+                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+
+        for j in range(0,len(self.model_name_list)):  
+            lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
+            if np.log(E[j]) - np.log(E[0]) <= -5.0:
+                if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
+
         running_total = 0 # Initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
@@ -170,7 +147,7 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return DKL # Output normalised DKL
+        return [lnB,decisivity,DKL] # Output utilities
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -234,8 +211,7 @@ class foxi:
                 for j in range(0,len(chains_column_numbers)):
                     if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [lnB,deci] = self.decisivity_lnB_utility_functions(fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector)
-                DKL = self.DKL_utility_function(chains_column_numbers,fiducial_point_vector,forecast_data_function,number_of_points,error_vector)
+                [lnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
                 decisivity = decisivity + deci 
                 expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
                 expected_DKL += DKL

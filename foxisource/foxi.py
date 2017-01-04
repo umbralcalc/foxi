@@ -33,8 +33,8 @@ class foxi:
         self.column_functions 
         self.column_types_are_set = False
         self.evaluate_Fab
-        self.evaluate_Sabc
-        self.evaluate_Qabcd
+        #self.evaluate_Sabc
+        #self.evaluate_Qabcd
 
 
     def set_chains(self,name_of_chains): 
@@ -60,11 +60,34 @@ class foxi:
         if self.column_types[i] == 'log10': return np.log10(input_value)
 
     
-    def evaluate_Fab(self,current_data_central_point_vector,stepsize):
+    def evaluate_Fab(self,chains_column_numbers,current_data_central_point_vector,stepsizes,number_of_points):
     # Compute the Fisher matrix (or 1st approximation) from the likelihood chains which can be used to efficiently evaluate the Kullback-Leibler divergence utility
+        '''
+        Inputs to evaluate_Fab:       
+
+
+        chains_column_numbers              =  A list of the numbers of the columns in the chains that correspond to
+                                              the parameters of interest, starting with 0. These should be in the same
+                                              order as all other structures.
+     
+
+        current_data_central_point_vector  = 
+
+        
+        stepsizes                          = 
+
+
+        number_of_points                   =  The number of points specified to be read off from the current data chains.        
+
+
+        '''
+
         differences = np.zeros(len(chains_column_numbers)) # Initialise the array of zeros for the differences summation
         first_deriv_differences = []
         for i in range(0,len(chains_column_numbers)): first_deriv_differences.append(np.zeros(len(chains_column_numbers))) # Initialise zeros for derivatives
+        
+        running_total = 0 # Initialize a running total of points read in from the chains
+
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
@@ -74,17 +97,25 @@ class foxi:
                     if self.column_types_are_set == True: fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat priors unless this is True
                 differences += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector)
-                for i in range(0,len(chains_column_numbers)): first_deriv_differences[i] += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector) - (stepsize*np.asarray(current_data_central_point_vector)) # Compute first dervative differences 
-        differences_trans = differences.T
-        first_deriv_differences_trans = [first_deriv_differences[i].T for i in range(0,len(chains_column_numbers))]
-        # Central and first derivative differences
-        covmat = differences*differences_trans
-        covmat_change = [first_deriv_differences[i]*first_deriv_differences_trans[i] for i in range(0,len(chains_column_numbers))]
+                for i in range(0,len(chains_column_numbers)): first_deriv_differences[i] += np.asarray(fiducial_point_vector)-np.asarray(current_data_central_point_vector) - np.asarray(stepsizes) # Compute first dervative differences 
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_points: break # Finish once reached specified number of data points 
+
+        covmat = np.array([[differences[i]*differences[j]/float(number_of_points) for j in range(0,len(chains_column_numbers))] for i in range(0,len(chains_column_numbers))])
+        covmat_change = [np.array([[first_deriv_differences[i][k]*first_deriv_differences[j][k]/float(number_of_points) for j in range(0,len(chains_column_numbers))] for i in range(0,len(chains_column_numbers))]) for k in range(0,len(chains_column_numbers))]
         first_deriv_covmat = [covmat_change[i] - covmat for i in range(0,len(chains_column_numbers))]
         # Central and first derivative covariance matrices
+
         inverse_covmat = np.linalg.inv(covmat)
         Fab = [[0.5*np.sum(inverse_covmat*first_deriv_covmat[i]*inverse_covmat*first_deriv_covmat[i]) for i in range(0,len(chains_column_numbers))] for j in range(0,len(chains_column_numbers))]  # Fisher matrix calculation  
-        return Fab
+
+        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout_likelihood_Fab.txt",'w') 
+        for i in range(0,len(Fab[0])): 
+            for j in range(0,len(Fab[0])):     
+                output_data_file.write(str(Fab[i][j]) + "\t")
+            output_data_file.write("\n")
+        output_data_file.close()
+        # Output to a newly created data file
 
 
     def decisivity_lnB_utility_functions(self,fiducial_point_vector,forecast_data_function,prior_column_numbers,number_of_prior_points,error_vector):

@@ -130,7 +130,7 @@ class foxi:
 
         for j in range(0,len(self.model_name_list)):  
             lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
-            if np.log(E[j]) - np.log(E[0]) <= -5.0:
+            if abs(np.log(E[j]) - np.log(E[0])) >= 5.0:
                 if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
 
         running_total = 0 # Initialize a running total of points read in from the chains

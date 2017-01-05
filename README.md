@@ -1,10 +1,10 @@
-## foxi
+# foxi
 
-# Futuristic Observations and their eXpected Information
+## Futuristic Observations and their eXpected Information
 
 Using information theory and Bayesian inference this code computes expected utilities given futuristic observations. 
 
-# The following expected utilities are used:
+## The following expected utilities are used:
 
 The expected ln-Bayes factor between models.
 

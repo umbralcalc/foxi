@@ -123,7 +123,7 @@ class foxi:
                     for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
                         if self.column_types_are_set == True: prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]])))
                         if self.column_types_are_set == False: prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
-                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/number_of_prior_points
+                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points

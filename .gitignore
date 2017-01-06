@@ -10,5 +10,5 @@ foxipriors/bayesinf_kmiii.txt
 foxipriors/bayesinf_li.txt
 foxipriors/bayesinf_rchi.txt
 foxipriors/bayesinf_rgi.txt
-foxiscripts/run_hi_mhi.py
+foxiscripts/run_plateaus.py
 TODO

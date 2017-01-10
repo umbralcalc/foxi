@@ -233,7 +233,7 @@ class foxi:
         decisivity /= float(number_of_points) 
         expected_DKL /= float(number_of_points) # Normalise outputs
         output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout.txt",'w') 
-        output_data_file.write(str(self.model_name_list) + ' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_lnB) + "\n")
+        output_data_file.write(str(self.model_name_list) + ' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_abslnB) + "\n")
         output_data_file.write(str(self.model_name_list) + ' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
         output_data_file.write('<DKL> = ' + str(expected_DKL))
         output_data_file.close()

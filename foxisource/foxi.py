@@ -32,6 +32,8 @@ class foxi:
         self.column_types = []
         self.column_functions 
         self.column_types_are_set = False
+        self.add_axes_labels
+        self.axes = plt.gca()
 
 
     def set_chains(self,name_of_chains): 
@@ -55,6 +57,12 @@ class foxi:
         if self.column_types[i] == 'flat': return input_value
         if self.column_types[i] == 'log': return np.exp(input_value)
         if self.column_types[i] == 'log10': return 10.0**(input_value)
+
+
+    def add_axes_labels(self, paramname_tex_x, paramname_tex_y, fontsize):
+    # Function to add axes LaTeX labels for foxiplots
+        self.axes.set_xlabel(paramname_tex_x,fontsize=float(fontsize))
+        self.axes.set_ylabel(paramname_tex_y,fontsize=float(fontsize))
 
 
     def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector):
@@ -135,8 +143,22 @@ class foxi:
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
-        for j in range(0,len(self.model_name_list)):  
-            abslnB[j] = abs(np.log(E[j]) - np.log(E[0])) # Compute absolute log Bayes factor utility
+        for j in range(0,len(self.model_name_list)):      
+        # Summation over the model priors    
+            if E[j] == 0.0:
+                if E[0] == 0.0:
+                    abslnB[j] = 0.0
+                else:
+                    abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
+            if E[0] == 0.0:
+                if E[j] == 0.0:
+                    abslnB[j] = 0.0
+                else:
+                    abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
+            else:
+                abslnB[j] = abs(np.log(E[j]) - np.log(E[0])) # Compute absolute log Bayes factor utility
+            # The block above deals with unruly values like 0.0 inside the logarithms
+
             if abs(np.log(E[j]) - np.log(E[0])) >= 5.0:
                 if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
 
@@ -152,7 +174,11 @@ class foxi:
                         fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                DKL += (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)
+
+                logargument = float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation
+                dkl = (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument)
+                if np.isnan(dkl) == False and logargument > 0.0: DKL += dkl # Conditions to avoid problems in the logarithm
+
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
@@ -309,7 +335,7 @@ class foxi:
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
                 [abslnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
-                abslnB_values.append(abslnB[1]) 
+                abslnB_values.append(abslnB[1])  
                 DKL_values.append(DKL) # Add computed utilities to the lists
                 x_values.append(fiducial_point_vector[xy_column_numbers[0]])
                 y_values.append(fiducial_point_vector[xy_column_numbers[1]]) # Add corresponding (x,y) values to lists

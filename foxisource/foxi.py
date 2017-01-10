@@ -93,8 +93,8 @@ class foxi:
         # Initialize an array of values of the decisivity for the number of models (reference model is element 0)
         E = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the Bayesian evidence for the number of models (reference model is element 0)
-        lnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
+        abslnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
         forecast_data_function_normalisation = 0.0
@@ -136,7 +136,7 @@ class foxi:
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
         for j in range(0,len(self.model_name_list)):  
-            lnB[j] = np.log(E[j]) - np.log(E[0]) # Compute log Bayes factor utility
+            abslnB[j] = abs(np.log(E[j]) - np.log(E[0])) # Compute absolute log Bayes factor utility
             if abs(np.log(E[j]) - np.log(E[0])) >= 5.0:
                 if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
 
@@ -156,7 +156,7 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return [lnB,decisivity,DKL] # Output utilities
+        return [abslnB,decisivity,DKL] # Output utilities
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -203,12 +203,12 @@ class foxi:
 
         deci = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-        lnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
+        abslnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
         decisivity = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the full decisivity for the number of models (reference model is element 0)
-        expected_lnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the expected log Bayes factor for the number of models (reference model is element 0)
+        expected_abslnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the expected absolute log Bayes factor for the number of models (reference model is element 0)
         expected_DKL = 0.0
         # Initialize the count for expected Kullback-Leibler divergence     
 
@@ -222,18 +222,18 @@ class foxi:
                         fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [lnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
+                [abslnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
                 decisivity = decisivity + deci 
-                expected_lnB = expected_lnB + lnB # Do quick vector additions to update both expected utilities
+                expected_abslnB = expected_abslnB + abslnB # Do quick vector additions to update both expected utilities
                 expected_DKL += DKL
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
         
-        expected_lnB /= float(number_of_points)
+        expected_abslnB /= float(number_of_points)
         decisivity /= float(number_of_points) 
         expected_DKL /= float(number_of_points) # Normalise outputs
         output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout.txt",'w') 
-        output_data_file.write(str(self.model_name_list) + ' [<lnB>_1, <lnB>_2, ...] = ' + str(expected_lnB) + "\n")
+        output_data_file.write(str(self.model_name_list) + ' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_lnB) + "\n")
         output_data_file.write(str(self.model_name_list) + ' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
         output_data_file.write('<DKL> = ' + str(expected_DKL))
         output_data_file.close()
@@ -289,11 +289,11 @@ class foxi:
 
         deci = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-        lnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the log Bayes factor for the number of models (reference model is element 0)
+        abslnB = np.zeros(len(self.model_name_list))
+        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
         
         DKL_values = []
-        lnB_values = []
+        abslnB_values = []
         x_values = []
         y_values = []
         # Initialise lists of values for the utilities and (x,y) values to be dumped    
@@ -308,8 +308,8 @@ class foxi:
                         fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [lnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
-                lnB_values.append(lnB[1]) 
+                [abslnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
+                abslnB_values.append(abslnB[1]) 
                 DKL_values.append(DKL) # Add computed utilities to the lists
                 x_values.append(fiducial_point_vector[xy_column_numbers[0]])
                 y_values.append(fiducial_point_vector[xy_column_numbers[1]]) # Add corresponding (x,y) values to lists
@@ -320,20 +320,20 @@ class foxi:
         y_plot_values = pl.linspace(ymin,ymax, 100)
         # Generate a range of (x,y) plot values         
 
-        z_plot_values_lnB = mpl.mlab.griddata(x_values,y_values,lnB_values,x_plot_values,y_plot_values,interp=kind_of_interpolation)
+        z_plot_values_abslnB = mpl.mlab.griddata(x_values,y_values,abslnB_values,x_plot_values,y_plot_values,interp=kind_of_interpolation)
         z_plot_values_DKL = mpl.mlab.griddata(x_values,y_values,DKL_values,x_plot_values,y_plot_values,interp=kind_of_interpolation)
         # Interpolate to obtain plot values for output
 
-        plot_data_file_lnB = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_lnB_data.txt",'w')
+        plot_data_file_abslnB = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_abslnB_data.txt",'w')
         plot_data_file_DKL = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_DKL_data.txt",'w') 
 
         for i in range(0,len(x_plot_values)):
             for j in range(0,len(y_plot_values)):
-                plot_data_file_lnB.write(str(x_plot_values[i]) + "\t" + str(y_plot_values[j]) + "\t" + str(z_plot_values_lnB[i,j]) + "\n")
+                plot_data_file_abslnB.write(str(x_plot_values[i]) + "\t" + str(y_plot_values[j]) + "\t" + str(z_plot_values_abslnB[i,j]) + "\n")
                 plot_data_file_DKL.write(str(x_plot_values[i]) + "\t" + str(y_plot_values[j]) + "\t" + str(z_plot_values_DKL[i,j]) + "\n")
                 # Output plot data to the files
 
-        plot_data_file_lnB.close()
+        plot_data_file_abslnB.close()
         plot_data_file_DKL.close()
 
 

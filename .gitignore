@@ -14,5 +14,5 @@ foxiscripts/run_plateaus.py
 foxiplots/foxiplot.pdf
 foxiplots/foxiplot_DKL.pdf
 foxioutput/foxiplots_DKL_data.txt
-foxioutput/foxiplots_lnB_data.txt
+foxioutput/foxiplots_abslnB_data.txt
 TODO

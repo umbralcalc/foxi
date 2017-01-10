@@ -164,7 +164,7 @@ class foxi:
         prior_point_vector = np.asarray(prior_point_vector) 
         fiducial_point_vector = np.asarray(fiducial_point_vector)      
         error_vector = np.asarray(error_vector)
-        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
+        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*np.log(np.prod(error_vector))))
 
 
     def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 

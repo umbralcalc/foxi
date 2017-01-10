@@ -116,9 +116,10 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        running_total = 0 # Initialize a running total of points read in from the prior
-
         for i in range(0,len(self.model_name_list)):
+            
+            running_total = 0 # Initialize a running total of points read in from each prior
+
             with open(self.path_to_foxi_directory + '/' + self.priors_directory + 'bayesinf_' + self.model_name_list[i] + '.txt') as file:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
                 for line in file:
@@ -164,7 +165,7 @@ class foxi:
         prior_point_vector = np.asarray(prior_point_vector) 
         fiducial_point_vector = np.asarray(fiducial_point_vector)      
         error_vector = np.asarray(error_vector)
-        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*np.log(np.prod(error_vector))))
+        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
 
 
     def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 

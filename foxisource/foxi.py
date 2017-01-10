@@ -382,34 +382,33 @@ class foxi:
 
 
         '''
-        x_values = []
-        y_values = []
-        z_values = pl.zeros([100, 100])
-        # Initialise lists of (x,y) and a 2D array of z values  
 
-        x_before = 0.0
-        y_before = 0.0 
-        i = 0
-        j = 0     
-
-        with open(self.path_to_foxi_directory + "/" + self.output_directory + filename_choice) as file:
-            for line in file:
-                digits = line.split()
-                z_values[j,i] = float(digits[2])
-                if x_before != float(digits[0]):
-                    if len(x_values) < 100: x_values.append(float(digits[0]))
-                    if len(x_values) != 1: i += 1
-                    if i > 99: i = 0
-                    # Iterate on loop in x values
-                x_before = float(digits[0])
-                if y_before != float(digits[1]):
-                    if len(y_values) < 100: y_values.append(float(digits[1]))
-                    if len(y_values) != 1: j += 1
-                    if j > 99: j = 0
-                    # Iterate on alternate loop in y values
-                y_before = float(digits[1])  
-        # Reading in a list of values into a 2D array of values: z_values
+        x = []
+        y = []
+        z = []
         
+        with open(self.path_to_foxi_directory + "/" + self.output_directory + filename_choice) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                x.append(float(columns[0]))
+                y.append(float(columns[1]))
+                z.append(float(columns[2]))
+                # Read in data points
+
+        x = np.asarray(x)
+        y = np.asarray(y)
+        z = np.asarray(z)
+        # Change to arrays for easy manipulation
+
+        x = np.unique(x)
+        y = np.unique(y)
+        # Find coordinates
+
+        x_values,y_values = np.meshgrid(x,y)
+        z_values = z.reshape(len(y),len(x))
+        # Assign values to x,y,z where z is a 2D array having created the grid
+       
         pl.xlim(xmin,xmax)
         pl.ylim(ymin,ymax)
         # Add in extra axes limits if required

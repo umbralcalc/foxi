@@ -10,6 +10,7 @@ fontsize = 15 # Axes font sizes
 ranges = [(0.0,1.0),(0.0,1.0)] # Lower and upper bounds set in a tuple for each variable
 number_of_bins = 100 # Set the number of bins for the corner plot
 number_of_samples = 100 # Set the number of samples to plot
+label_values = [None,None] # Label important values within a list for each subplot, otherwise None for that element 
 
 foxiplots_instance.add_axes_labels(axes_labels,fontsize) # Add the LaTeX axes labels and fontsize
-foxiplots_instance.plot_foxiplots(filename_choice,column_numbers,ranges,number_of_bins,number_of_samples) # Making plots using corner
+foxiplots_instance.plot_foxiplots(filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values) # Making plots using corner

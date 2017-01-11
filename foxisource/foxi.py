@@ -291,7 +291,7 @@ class foxi:
             plot_data_file.close()    
 
 
-    def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples):
+    def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values):
     # Plot data from files using corner and output to the directory foxioutput/
         ''' 
         Quick usage and settings:
@@ -312,6 +312,11 @@ class foxi:
 
 
         number_of_samples          =  Integer number of samples to be plotted from the file
+
+
+        label_values               =  Label values of interest - a list of these values with
+                                      an element for each subplot in corner, otherwise should
+                                      have value -> None -> for that element
 
 
         '''
@@ -337,7 +342,7 @@ class foxi:
         points = np.asarray(points)
         # Change to arrays for easy manipulation
 
-        figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False)
+        figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
         # Use corner to plot the samples 
 
         figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)

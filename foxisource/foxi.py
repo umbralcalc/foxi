@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 rc('text',usetex=True)
 import pylab as pl
+import corner
 
 class foxi:
 # Initialize the 'foxi' method class
@@ -18,7 +19,6 @@ class foxi:
         self.set_model_name_list
         self.utility_functions
         self.run_foxi
-        self.run_foxiplots
         self.plot_foxiplots
         self.chains_directory = 'foxichains/'
         self.priors_directory = 'foxipriors/'
@@ -27,13 +27,13 @@ class foxi:
         self.source_directory = 'foxisource/'   
         self.gaussian_forecast
         self.flashy_foxi
-        self.flashy_foxiplots
         self.set_column_types
         self.column_types = []
         self.column_functions 
         self.column_types_are_set = False
         self.add_axes_labels
-        self.axes = plt.gca()
+        self.axes_labels = []
+        self.fontsize = 15
 
 
     def set_chains(self,name_of_chains): 
@@ -59,10 +59,10 @@ class foxi:
         if self.column_types[i] == 'log10': return 10.0**(input_value)
 
 
-    def add_axes_labels(self, paramname_tex_x, paramname_tex_y, fontsize):
+    def add_axes_labels(self,list_of_labels,fontsize):
     # Function to add axes LaTeX labels for foxiplots
-        self.axes.set_xlabel(paramname_tex_x,fontsize=float(fontsize))
-        self.axes.set_ylabel(paramname_tex_y,fontsize=float(fontsize))
+        self.axes_labels = list_of_labels
+        self.fontsize = fontsize
 
 
     def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector):
@@ -97,6 +97,8 @@ class foxi:
 
 
         '''
+
+
         decisivity = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the decisivity for the number of models (reference model is element 0)
         E = np.zeros(len(self.model_name_list))
@@ -194,7 +196,7 @@ class foxi:
         return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
 
 
-    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 
+    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,foxiplot_data=False): 
     # This is the main algorithm to compute expected utilites and compute other quantities
         ''' 
         Quick usage and settings:
@@ -219,7 +221,12 @@ class foxi:
         error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector
 
 
+        foxiplot_data              =  Boolean to decide whether or not to output data for plotting the utilities
+                                      with the foxiplot tool    
+
+
         '''
+
 
         self.flashy_foxi() # Display propaganda      
 
@@ -238,6 +245,11 @@ class foxi:
         expected_DKL = 0.0
         # Initialize the count for expected Kullback-Leibler divergence     
 
+        if foxiplot_data == True:
+            plot_data_file_abslnB = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_abslnB_data.txt",'w')
+            plot_data_file_DKL = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_DKL_data.txt",'w') 
+            # Initialize output files if outputting plot data
+
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
@@ -252,6 +264,17 @@ class foxi:
                 decisivity = decisivity + deci 
                 expected_abslnB = expected_abslnB + abslnB # Do quick vector additions to update both expected utilities
                 expected_DKL += DKL
+                
+                if foxiplot_data == True:
+                    for value in fiducial_point_vector:
+                        plot_data_file_abslnB.write(str(value) + "\t")
+                    for value in abslnB:
+                        plot_data_file_abslnB.write(str(value) + "\n")
+                    for value in fiducial_point_vector:
+                        plot_data_file_DKL.write(str(value) + "\t")
+                    plot_data_file_DKL.write(str(DKL) + "\n")
+                    # Write data to files if requested                    
+
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
         
@@ -264,160 +287,47 @@ class foxi:
         output_data_file.write('<DKL> = ' + str(expected_DKL))
         output_data_file.close()
 
-
-    def run_foxiplots(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,xy_column_numbers,xmin,xmax,ymin,ymax,kind_of_interpolation): 
-    # This is the plot data outputting tool for the utilites
-        ''' 
-        Quick usage and settings:
-                 
-
-        chains_column_numbers      =  A list of the numbers of the columns in the chains that correspond to
-                                      the parameters of interest, starting with 0. These should be in the same
-                                      order as all other structures
+        if foxiplot_data == True:
+            plot_data_file_abslnB.close()
+            plot_data_file_DKL.close()      
 
 
-        prior_column_numbers       =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
-                                      correspond to the parameters of interest, starting with 0. These should 
-                                      be in the same order as all other structures. In run_foxiplots one should
-                                      only have two models since plotting is computationally expensive, so i = 0,1
-                                      where 0 still corresponds to the reference model
-
-
-        number_of_points           =  The number of points specified to be read off from the current data chains
-
-
-        number_of_prior_points     =  The number of points specified to be read off from the prior
-
-
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector
-
-        
-        xy_column_numbers          =  A 2-element list with the column numbers of the (x,y) values to plot. Element 0 => x
-                                      and element 1 => y
-
-
-        xmin, xmax                 =  Limits set on the x-axis for the plot data
-
-        
-        ymin, ymax                 =  Limits set on the y-axis for the plot data
-
-
-        kind_of_interpolation      =  Either 'nn' or 'linear' for nearest-neighbour or linear interpolation schemes        
-
-
-        '''
-
-        self.flashy_foxiplots() # Display propaganda      
-
-        forecast_data_function = self.gaussian_forecast # Change the forecast data function here (if desired)
-
-        running_total = 0 # Initialize a running total of points read in from the chains
-
-        deci = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-        abslnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
-        
-        DKL_values = []
-        abslnB_values = []
-        x_values = []
-        y_values = []
-        # Initialise lists of values for the utilities and (x,y) values to be dumped    
-
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                fiducial_point_vector = [] 
-                for j in range(0,len(chains_column_numbers)):
-                    if self.column_types_are_set == True: 
-                        fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: 
-                        fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [abslnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
-                abslnB_values.append(abslnB[1])  
-                DKL_values.append(DKL) # Add computed utilities to the lists
-                x_values.append(fiducial_point_vector[xy_column_numbers[0]])
-                y_values.append(fiducial_point_vector[xy_column_numbers[1]]) # Add corresponding (x,y) values to lists
-                running_total+=1 # Also add to the running total
-                if running_total >= number_of_points: break # Finish once reached specified number of data points 
-   
-        x_plot_values = pl.linspace(xmin,xmax, 100) 
-        y_plot_values = pl.linspace(ymin,ymax, 100)
-        # Generate a range of (x,y) plot values         
-
-        z_plot_values_abslnB = mpl.mlab.griddata(x_values,y_values,abslnB_values,x_plot_values,y_plot_values,interp=kind_of_interpolation)
-        z_plot_values_DKL = mpl.mlab.griddata(x_values,y_values,DKL_values,x_plot_values,y_plot_values,interp=kind_of_interpolation)
-        # Interpolate to obtain plot values for output
-
-        plot_data_file_abslnB = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_abslnB_data.txt",'w')
-        plot_data_file_DKL = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_DKL_data.txt",'w') 
-
-        for i in range(0,len(x_plot_values)):
-            for j in range(0,len(y_plot_values)):
-                plot_data_file_abslnB.write(str(x_plot_values[i]) + "\t" + str(y_plot_values[j]) + "\t" + str(z_plot_values_abslnB[i,j]) + "\n")
-                plot_data_file_DKL.write(str(x_plot_values[i]) + "\t" + str(y_plot_values[j]) + "\t" + str(z_plot_values_DKL[i,j]) + "\n")
-                # Output plot data to the files
-
-        plot_data_file_abslnB.close()
-        plot_data_file_DKL.close()
-
-
-    def plot_foxiplots(self,filename_choice,xmin,xmax,ymin,ymax,zmin,zmax):
-    # Plot data from files in the directory foxioutput/
+    def plot_foxiplots(self,filename_choice,column_numbers):
+    # Plot data from files using corner and output to the directory foxioutput/
         ''' 
         Quick usage and settings:
                  
         
         filename_choice            =  Input the name of the file in foxioutput/ to be plotted 
-
-
-        xmin, xmax                 =  Limits set on the x-axis for the plot data
-
-        
-        ymin, ymax                 =  Limits set on the y-axis for the plot data
-
-
-        zmin, zmax                 =  Limits set on the z-axis for the plot data        
+       
+ 
+        column_numbers             =  A list of column numbers (starting at 0) that will be read
+                                      in from filename_choice and output using corner plot
 
 
         '''
 
-        x = []
-        y = []
-        z = []
+
+        points = []
+        # Initialise empty list for samples 
         
         with open(self.path_to_foxi_directory + "/" + self.output_directory + filename_choice) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
                 columns = line.split()
-                x.append(float(columns[0]))
-                y.append(float(columns[1]))
-                z.append(float(columns[2]))
-                # Read in data points
+                list_of_values = []
+                for number in column_numbers: 
+                    list_of_values.append(float(columns[number]))
+                points.append(list_of_values)
+                # Read in data points from the requested columns
 
-        x = np.asarray(x)
-        y = np.asarray(y)
-        z = np.asarray(z)
+        points = np.asarray(points)
         # Change to arrays for easy manipulation
 
-        x = np.unique(x)
-        y = np.unique(y)
-        # Find coordinates
+        figure = corner.corner(points,bins=100,color='b',labels=self.axes_labels,show_titles=True, title_kwargs={"fontsize": self.fontsize}, plot_contours=False)
+        # Use corner to plot the samples 
 
-        x_values,y_values = np.meshgrid(x,y)
-        z_values = z.reshape(len(y),len(x))
-        # Assign values to x,y,z where z is a 2D array having created the grid
-       
-        pl.xlim(xmin,xmax)
-        pl.ylim(ymin,ymax)
-        # Add in extra axes limits if required
-
-        plot_fig = pl.pcolormesh(x_values, y_values, z_values, vmin=zmin, vmax=zmax, cmap='BuPu')
-        pl.colorbar()
-        # Plot the values
-
-        pl.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
+        figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
         # Saving output to foxiplots/
 
 
@@ -439,28 +349,5 @@ class foxi:
         print('      DISTRIBUTED UNDER MIT LICENSE       ')
         print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
         print('                                          ')
-
-
-    def flashy_foxiplots(self): # Just some more front page propaganda...
-        print('                                                                                          ')
-        print('>>>>>>>>>>>                                                                               ')
-        print('>>>       >>                                       >>                   >>                ')
-        print('>>                                                 >>                   >>                ')
-        print('>>                                  >>             >>                   >>                ')
-        print('>>>>>>>>>    >>>>>>>    >>>    >>>       >>>>>>>>  >>       >>>>>>>     >>       >>>>>>   ') 
-        print('>>          >>     >>     >>  >>    >>   >>    >>  >>      >>     >>    >>>>>>   >>       ')
-        print('>>         >>       >>     >>>>     >>   >>    >>  >>     >>       >>   >>        >>      ')
-        print('>>         >>       >>    >>>>      >>   >>    >>  >>     >>       >>   >>          >>    ')
-        print('>>          >>     >>    >>  >>     >>   >>>>>>    >>      >>     >>    >>           >>   ')
-        print('>>           >>>>>>>   >>>    >>>   >>>  >>         >>>>>>  >>>>>>>      >>>>>>  >>>>>    ')
-        print('                                         >>                                               ')
-        print('                                         >>                                               ')
-        print('                                         >>                                               ')
-        print('                                                                                          ')
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print('                              Author: Robert J. Hardwick                                  ')
-        print('                             DISTRIBUTED UNDER MIT LICENSE                                ')
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print('                                                                                          ')
 
 

@@ -1,0 +1,15 @@
+import sys
+sys.path.append('INSERT PATH TO foxisource/')
+from foxi import foxi
+
+foxiplots_instance = foxi('INSERT PATH TO foxi/') # Fire up a new instance of foxi for plotting
+filename_choice = 'foxiplots_data.txt' # Choose file to be plotted
+column_numbers = [0,1] # Choose the columns from the file to plot using corner
+axes_labels = [r'$\mathrm{Anything 1}$',r'$\mathrm{Anything 2}$']
+fontsize = 15 # Axes font sizes
+ranges = [(0.0,1.0),(0.0,1.0)] # Lower and upper bounds set in a tuple for each variable
+number_of_bins = 100 # Set the number of bins for the corner plot
+number_of_samples = 100 # Set the number of samples to plot
+
+foxiplots_instance.add_axes_labels(axes_labels,fontsize) # Add the LaTeX axes labels and fontsize
+foxiplots_instance.plot_foxiplots(filename_choice,column_numbers,ranges,number_of_bins,number_of_samples) # Making plots using corner

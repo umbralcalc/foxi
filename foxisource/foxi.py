@@ -20,11 +20,12 @@ class foxi:
         self.utility_functions
         self.run_foxi
         self.plot_foxiplots
-        self.chains_directory = 'foxichains/'
+        self.chains_directory = 'foxichains/' 
         self.priors_directory = 'foxipriors/'
         self.output_directory = 'foxioutput/'
         self.plots_directory = 'foxiplots/'
-        self.source_directory = 'foxisource/'   
+        self.source_directory = 'foxisource/'
+        # These can be changed above if they are annoying :-) I did get carried away...
         self.gaussian_forecast
         self.flashy_foxi
         self.set_column_types
@@ -246,8 +247,7 @@ class foxi:
         # Initialize the count for expected Kullback-Leibler divergence     
 
         if foxiplot_data == True:
-            plot_data_file_abslnB = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_abslnB_data.txt",'w')
-            plot_data_file_DKL = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_DKL_data.txt",'w') 
+            plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
             # Initialize output files if outputting plot data
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
@@ -267,13 +267,13 @@ class foxi:
                 
                 if foxiplot_data == True:
                     for value in fiducial_point_vector:
-                        plot_data_file_abslnB.write(str(value) + "\t")
+                        plot_data_file.write(str(value) + "\t")
+                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                     for value in abslnB:
-                        plot_data_file_abslnB.write(str(value) + "\n")
-                    for value in fiducial_point_vector:
-                        plot_data_file_DKL.write(str(value) + "\t")
-                    plot_data_file_DKL.write(str(DKL) + "\n")
-                    # Write data to files if requested                    
+                        plot_data_file.write(str(value) + "\t")
+                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                    plot_data_file.write(str(DKL) + "\n")
+                    # Write data to file if requested                    
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
@@ -288,11 +288,10 @@ class foxi:
         output_data_file.close()
 
         if foxiplot_data == True:
-            plot_data_file_abslnB.close()
-            plot_data_file_DKL.close()      
+            plot_data_file.close()    
 
 
-    def plot_foxiplots(self,filename_choice,column_numbers):
+    def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples):
     # Plot data from files using corner and output to the directory foxioutput/
         ''' 
         Quick usage and settings:
@@ -305,11 +304,23 @@ class foxi:
                                       in from filename_choice and output using corner plot
 
 
+        ranges                     =  A tuple [(),(),...] with the plot ranges for all of the
+                                      variables that are plotted 
+
+
+        number_of_bins             =  Integer input for the number of bins for all axes
+
+
+        number_of_samples          =  Integer number of samples to be plotted from the file
+
+
         '''
 
 
         points = []
-        # Initialise empty list for samples 
+        # Initialise empty lists for samples
+
+        running_total = 0 # Initialize a running total of points read in from the data file
         
         with open(self.path_to_foxi_directory + "/" + self.output_directory + filename_choice) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -320,11 +331,13 @@ class foxi:
                     list_of_values.append(float(columns[number]))
                 points.append(list_of_values)
                 # Read in data points from the requested columns
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_samples: break # Finish once reached specified number of data points 
 
         points = np.asarray(points)
         # Change to arrays for easy manipulation
 
-        figure = corner.corner(points,bins=100,color='b',labels=self.axes_labels,show_titles=True, title_kwargs={"fontsize": self.fontsize}, plot_contours=False)
+        figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False)
         # Use corner to plot the samples 
 
         figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)

@@ -13,6 +13,5 @@ foxipriors/bayesinf_rgi.txt
 foxiscripts/run_plateaus.py
 foxiplots/foxiplot.pdf
 foxiplots/foxiplot_DKL.pdf
-foxioutput/foxiplots_DKL_data.txt
-foxioutput/foxiplots_abslnB_data.txt
+foxioutput/foxiplots_data.txt
 TODO

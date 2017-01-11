@@ -185,7 +185,7 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return [abslnB,decisivity,DKL] # Output utilities
+        return [abslnB,decisivity,DKL,np.log(E)] # Output utilities and raw ln-evidences
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -260,7 +260,7 @@ class foxi:
                         fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [abslnB,deci,DKL] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
+                [abslnB,deci,DKL,lnE] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
                 decisivity = decisivity + deci 
                 expected_abslnB = expected_abslnB + abslnB # Do quick vector additions to update both expected utilities
                 expected_DKL += DKL
@@ -270,6 +270,9 @@ class foxi:
                         plot_data_file.write(str(value) + "\t")
                     plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                     for value in abslnB:
+                        plot_data_file.write(str(value) + "\t")
+                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                    for value in lnE:
                         plot_data_file.write(str(value) + "\t")
                     plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                     plot_data_file.write(str(DKL) + "\n")

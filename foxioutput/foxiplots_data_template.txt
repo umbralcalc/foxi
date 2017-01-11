@@ -1,0 +1,8 @@
+posterior sample coordinates	0	|lnB| values	0	lnE values	0	DKL value	
+posterior sample coordinates	1	|lnB| values	1	lnE values	1	DKL value	
+posterior sample coordinates	2	|lnB| values	2	lnE values	2	DKL value	
+posterior sample coordinates	3	|lnB| values	3	lnE values	3	DKL value	
+posterior sample coordinates	4	|lnB| values	4	lnE values	4	DKL value	
+posterior sample coordinates	5	|lnB| values	5	lnE values	5	DKL value	
+posterior sample coordinates	6	|lnB| values	6	lnE values	6	DKL value	
+...	  

@@ -6,6 +6,7 @@ from matplotlib import rc
 rc('text',usetex=True)
 import pylab as pl
 from scipy.misc import logsumexp
+import matplotlib.cm as cm
 import corner
 
 class foxi:
@@ -470,8 +471,8 @@ class foxi:
         # Output data to `rerun_foxiout.txt'
 
 
-    def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values):
-    # Plot data from files using corner and output to the directory foxioutput/
+    def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values,corner_plot=False):
+    # Plot data from files using either corner or 2D histogram and output to the directory foxioutput/
         ''' 
         Quick usage and settings:
                  
@@ -480,7 +481,7 @@ class foxi:
        
  
         column_numbers             =  A list of column numbers (starting at 0) that will be read
-                                      in from filename_choice and output using corner plot
+                                      in from filename_choice and output the plot(s)
 
 
         ranges                     =  A tuple [(),(),...] with the plot ranges for all of the
@@ -497,9 +498,11 @@ class foxi:
                                       an element for each subplot in corner, otherwise should
                                       have value -> None -> for that element
 
+        corner_plot                =  A Boolean: select 'True' for a corner plot of the utility
+                                      values, select 'False' for a collection of 2D histograms  
+
 
         '''
-
 
         points = []
         # Initialise empty lists for samples
@@ -521,10 +524,57 @@ class foxi:
         points = np.asarray(points)
         # Change to arrays for easy manipulation
 
-        figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
+        if corner_plot == False:
+            for i in range(0,len(column_numbers)-1):
+                y_points = [points[j][i] for j in range(0,number_of_samples)]
+                x_points = [points[j][i+1] for j in range(0,number_of_samples)]
+                y_step = (ranges[i][1]-ranges[i][0])/float(number_of_bins)
+                x_step = (ranges[i+1][1]-ranges[i+1][0])/float(number_of_bins)
+                # Estimate reasonable bin widths
+
+                y_sides = [(y_step*float(j)) + ranges[i][0] for j in range(0,number_of_bins)]  
+                x_sides = [(x_step*float(j)) + ranges[i+1][0] for j in range(0,number_of_bins)]       
+                # Generate list of bins           
+
+                z_values,x_sides,y_sides = np.histogram2d(y_points,x_points,bins=(x_sides,y_sides))
+                # Generate histogram densities
+
+                new_fig = plt.figure()
+                axes = plt.gca()
+                axes.set_ylim(ranges[i])
+                axes.set_xlim(ranges[i+1])
+                # Create a new figure for output with user-set axes limits
+
+                x,y = np.meshgrid(x_sides,y_sides)
+                # Generate a grid to plot from
+
+                my_cmap = cm.get_cmap('BuPu')
+                my_cmap.set_under('w') 
+                # Making the lowest value 'true' white for style purposes          
+
+                axes.pcolormesh(x,y,z_values,cmap=my_cmap)
+                axes.set_aspect('equal')
+                axes.scatter(x_points,y_points,alpha=0.1)
+                # Generate the plot using pcolormesh and scatter
+                plt.axis([ranges[i+1][0],ranges[i+1][1]-x_step,ranges[i][0],ranges[i][1]-y_step])
+                # Fix edges of axes for neatness
+
+                axes.set_xlabel(self.axes_labels[i+1])
+                axes.set_ylabel(self.axes_labels[i])
+                # Set user-defined labels
+
+                for item in ([axes.title, axes.xaxis.label, axes.yaxis.label] + axes.get_xticklabels() + axes.get_yticklabels()):
+                    item.set_fontsize(self.fontsize)
+                # User settings for the font size
+
+                new_fig.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot_2DHist_" + str(i) + ".pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
+                # Saving output to foxiplots/
+
+        if corner_plot == True:
+            figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
         # Use corner to plot the samples 
 
-        figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
+            figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
         # Saving output to foxiplots/
 
 

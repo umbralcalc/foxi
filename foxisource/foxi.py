@@ -324,16 +324,14 @@ class foxi:
             plot_data_file.close()    
 
 
-    def rerun_foxi(self,chains_column_numbers,expected_lnB_and_DKL,foxiplot_samples,number_of_points,number_of_foxiplot_samples): 
+    def rerun_foxi(self,foxiplot_samples,expected_lnB_and_DKL,number_of_foxiplot_samples): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
     #  (not deci) and also the utilities using evidence-weighted averageing are computed
         ''' 
         Quick usage and settings:
                  
 
-        chains_column_numbers          =  A list of the numbers of the columns in the chains that correspond to
-                                          the parameters of interest, starting with 0. These should be in the same
-                                          order as all other structures
+        foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file that is automatically read and interpreted
 
 
         expected_lnB_and_DKL           =  A list structured like [<lnB>_1,<lnB>_2,...,<lnB>_N,<DKL>] of the expected utilities
@@ -342,12 +340,6 @@ class foxi:
                                           order as read in from the foxiplot output (or, equivalently, the same order as they 
                                           were when they were first input into the run_foxi function with the arguments like
                                           prior_column_numbers)   
-
-
-        foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file that is automatically read and interpreted
-
-
-        number_of_points               =  The number of points specified to be read off from the current data chains
 
 
         number_of_foxiplot_samples     =  The number of points specified to be read off from the foxiplot data file
@@ -398,7 +390,7 @@ class foxi:
         som_DKL = 0.0
         # Initialize the second-moment of the Kullback-Leibler divergence 
 
-        expected_abslnB = [float(expected_lnB_and_DKL[value]) in range(0,len(expected_lnB_and_DKL)-1)]
+        expected_abslnB = [float(expected_lnB_and_DKL[value]) for value in range(0,len(expected_lnB_and_DKL)-1)]
         expected_abslnB = np.asarray(expected_abslnB)  
         expected_DKL = float(expected_lnB_and_DKL[len(expected_lnB_and_DKL)-1])
         expected_DKL = np.asarray(expected_DKL) 
@@ -409,7 +401,7 @@ class foxi:
             for line in file:
                 columns = line.split()
                 fiducial_point_vector = [] 
-                DKL = float(columns[len(columns)])
+                DKL = float(columns[len(columns)-1])
                 for j in range(0,len(columns)):
                     if j < number_of_fiducial_point_dimensions: 
                         fiducial_point_vector.append(float(columns[j]))
@@ -424,10 +416,10 @@ class foxi:
 
                 for i in range(0,number_of_models):
                     if lnE[i] - lnE[0] < 0.0 and i != 0: 
-                        expected_abslnB_Eave[i] += abslnB*np.exp(lnE[0]) 
+                        expected_abslnB_Eave[i] += abslnB[i]*np.exp(lnE[0]) 
                         total_E += np.exp(lnE[0]) 
                     if lnE[i] - lnE[0] > 0.0 and i != 0: 
-                        expected_abslnB_Eave[i] += abslnB*np.exp(lnE[i]) 
+                        expected_abslnB_Eave[i] += abslnB[i]*np.exp(lnE[i]) 
                         total_E += np.exp(lnE[i]) 
  
                 running_total+=1 # Also add to the running total

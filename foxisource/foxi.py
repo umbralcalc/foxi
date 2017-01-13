@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 rc('text',usetex=True)
 import pylab as pl
+from scipy.misc import logsumexp
 import corner
 
 class foxi:
@@ -345,13 +346,12 @@ class foxi:
         number_of_foxiplot_samples     =  The number of points specified to be read off from the foxiplot data file
     
 
-
         '''
 
 
         self.flashy_foxi() # Display propaganda      
 
-        running_total = 0 # Initialize a running total of points read in from the chains
+        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
         
         line_for_analysis_1 = []
         line_for_analysis_2 = []
@@ -359,7 +359,7 @@ class foxi:
         # Initialise lines to be used to analyse the foxiplot data file for correct reading
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
+        # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
             for line in file:
                 columns = line.split()
                 if running_total == 0:
@@ -375,20 +375,20 @@ class foxi:
         [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_lines(line_for_analysis_1,line_for_analysis_2,line_for_analysis_3)
         # Read in lines, analyse and output useful information for reading the data file or return error
 
-        running_total = 0 # Initialize a running total of points read in from the chains
+        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
 
         abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
-        expected_abslnB_Eave = np.zeros(number_of_models)
-        # Initialize an the expected evidence-averaged version of abslnB
+        lnexpected_abslnB_Eave = np.zeros(number_of_models)
+        # Initialize an the log expected evidence-averaged version of abslnB
         lnE = np.zeros(number_of_models)
         # Initialize an array of values of the log evidence for the number of models
         som_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the second-moment of the absolute log Bayes factor for the number of models (reference model is element 0)
-        total_E = np.zeros(number_of_models)
-        # Initialize an array of values of the second-moment of the total evidence normalisation for the evidence-averaging
+        total_lnE = np.zeros(number_of_models)
+        # Initialize an array of values of the second-moment of the total log evidence normalisation for the evidence-averaging
         som_DKL = 0.0
-        # Initialize the second-moment of the Kullback-Leibler divergence 
+        # Initialize the second-moment of the Kullback-Leibler divergence  
 
         expected_abslnB = [float(expected_lnB_and_DKL[value]) for value in range(0,len(expected_lnB_and_DKL)-1)]
         expected_abslnB = np.asarray(expected_abslnB)  
@@ -397,7 +397,7 @@ class foxi:
         # Extract the expected utilities 
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
+        # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
             for line in file:
                 columns = line.split()
                 fiducial_point_vector = [] 
@@ -414,25 +414,60 @@ class foxi:
                 som_abslnB += (abslnB-expected_abslnB)**2 # Do quick vector additions to update second-moment utilities
                 som_DKL += (DKL-expected_DKL)**2  
 
-                for i in range(0,number_of_models):
-                    if lnE[i] - lnE[0] < 0.0 and i != 0: 
-                        expected_abslnB_Eave[i] += abslnB[i]*np.exp(lnE[0]) 
-                        total_E += np.exp(lnE[0]) 
-                    if lnE[i] - lnE[0] > 0.0 and i != 0: 
-                        expected_abslnB_Eave[i] += abslnB[i]*np.exp(lnE[i]) 
-                        total_E += np.exp(lnE[i]) 
- 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
-        
+        # Computed the second-moment utilities in the above loop
+
+        for i in range(0,number_of_models):
+        # Loop over models each time of reading all of the points to reduce memory issues
+            lnE_weighting = []
+            lnabslnB_plus_lnE_weighting = []
+            # Lists to store values in order to compute evidence-averaged quantities in logsumexp
+ 
+            running_total = 0 # Initialize a running total of points read in from the foxiplot data file
+
+            with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
+            # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
+                for line in file:
+                    columns = line.split()
+                    fiducial_point_vector = [] 
+                    DKL = float(columns[len(columns)-1])
+                    for j in range(0,len(columns)):
+                        if j < number_of_fiducial_point_dimensions: 
+                             fiducial_point_vector.append(float(columns[j]))
+                        if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
+                             abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                        if j > number_of_fiducial_point_dimensions + number_of_models and j < number_of_fiducial_point_dimensions + (2*number_of_models): 
+                            lnE[j - number_of_fiducial_point_dimensions - number_of_models - 1] = float(columns[j])
+                            # Read in fiducial points and utilities from foxiplot data file                                   
+                    
+                    if lnE[i] - lnE[0] <= 0.0 and i != 0:
+                        lnE_weighting.append(lnE[0]) 
+                        lnabslnB_plus_lnE_weighting.append(np.log(abslnB[i])+lnE[0])
+                    if lnE[i] - lnE[0] > 0.0 and i != 0: 
+                        lnE_weighting.append(lnE[i])
+                        lnabslnB_plus_lnE_weighting.append(np.log(abslnB[i])+lnE[i])
+                    # Store weightings in their respective lists in order to compute them in logsumexp (avoids overflow/underflow problems)
+           
+                    running_total+=1 # Also add to the running total
+                    if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points        
+
+            if i != 0: 
+                total_lnE[i] = logsumexp(lnE_weighting)
+                lnexpected_abslnB_Eave[i] = logsumexp(lnabslnB_plus_lnE_weighting)
+            # Compute the quantities if not in the reference model index 0
+            # Calculating this way avoids overflow/underflow problems
+
         som_abslnB /= float(number_of_foxiplot_samples)
-        som_DKL /= float(number_of_foxiplot_samples)
-        expected_abslnB_Eave /= total_E # Normalise outputs
+        som_DKL /= float(number_of_foxiplot_samples) 
+        lnexpected_abslnB_Eave = lnexpected_abslnB_Eave - total_lnE   
+        # Normalise outputs and avoid NAN values + infinite values
         output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "rerun_foxiout.txt",'w')
-        output_data_file.write(str(self.model_name_list) + ' [<|lnB|_E>_1, <|lnB|_E>_2, ...] = ' + str(expected_abslnB_Eave) + "\n") 
+        output_data_file.write(str(self.model_name_list) + ' [<|lnB|_E>_1, <|lnB|_E>_2, ...] = ' + str(np.exp(lnexpected_abslnB_Eave)) + "\n") 
         output_data_file.write(str(self.model_name_list) + ' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
         output_data_file.write('< (DKL-<DKL>)^2 > = ' + str(som_DKL))
         output_data_file.close()
+        # Output data to `rerun_foxiout.txt'
 
 
     def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values):

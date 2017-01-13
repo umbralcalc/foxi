@@ -19,6 +19,8 @@ class foxi:
         self.set_model_name_list
         self.utility_functions
         self.run_foxi
+        self.rerun_foxi
+        self.analyse_foxiplot_lines
         self.plot_foxiplots
         self.chains_directory = 'foxichains/' 
         self.priors_directory = 'foxipriors/'
@@ -64,6 +66,34 @@ class foxi:
     # Function to add axes LaTeX labels for foxiplots
         self.axes_labels = list_of_labels
         self.fontsize = fontsize
+
+
+    def analyse_foxiplot_lines(self,line_1,line_2,line_3):
+    # Reads 3 lines from a foxiplot data file and outputs the number of models and dimension of data (this is just to check the input)
+        dim_data = 0
+        num_models = 0
+        dim_data_found = False
+        num_models_found = False
+        # Set up values and initialise Booleans
+
+        for value in range(0,len(line_1)):
+            if dim_data_found == True: 
+                if num_models_found == False:
+                    num_models = value - dim_data - 1   
+                    if line_1[value] == 0.0 and line_2[value] == 1.0 and line_3[value] == 2.0:    
+                        num_models_found = True
+            if dim_data_found == False:
+                dim_data = value 
+                if line_1[value] == 0.0 and line_2[value] == 1.0 and line_3[value] == 2.0:          
+                    dim_data_found = True
+ 
+        if dim_data_found == False or num_models_found == False:
+            print("rerun_foxi cannot read this file!!!") 
+            return [0,0]
+        if dim_data_found == True and num_models_found == True:
+            print("Reading in " + str(dim_data) + " fiducial point dimensions and " + str(num_models) + " models...") 
+            return [dim_data,num_models]
+            # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
     def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector):
@@ -185,7 +215,7 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return [abslnB,decisivity,DKL,np.log(E)] # Output utilities and raw ln-evidences
+        return [abslnB,decisivity,DKL,np.log(E)] # Output utilities and raw log evidences
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -292,6 +322,125 @@ class foxi:
 
         if foxiplot_data == True:
             plot_data_file.close()    
+
+
+    def rerun_foxi(self,chains_column_numbers,expected_lnB_and_DKL,foxiplot_samples,number_of_points,number_of_foxiplot_samples): 
+    # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
+    #  (not deci) and also the utilities using evidence-weighted averageing are computed
+        ''' 
+        Quick usage and settings:
+                 
+
+        chains_column_numbers          =  A list of the numbers of the columns in the chains that correspond to
+                                          the parameters of interest, starting with 0. These should be in the same
+                                          order as all other structures
+
+
+        expected_lnB_and_DKL           =  A list structured like [<lnB>_1,<lnB>_2,...,<lnB>_N,<DKL>] of the expected utilities
+                                          calculated from the initial run of foxi, where N here is the number of models and 
+                                          element 0 is the reference model. IMPORTANT!! -> The <lnB> values MUST be in the same 
+                                          order as read in from the foxiplot output (or, equivalently, the same order as they 
+                                          were when they were first input into the run_foxi function with the arguments like
+                                          prior_column_numbers)   
+
+
+        foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file that is automatically read and interpreted
+
+
+        number_of_points               =  The number of points specified to be read off from the current data chains
+
+
+        number_of_foxiplot_samples     =  The number of points specified to be read off from the foxiplot data file
+    
+
+
+        '''
+
+
+        self.flashy_foxi() # Display propaganda      
+
+        running_total = 0 # Initialize a running total of points read in from the chains
+        
+        line_for_analysis_1 = []
+        line_for_analysis_2 = []
+        line_for_analysis_3 = []
+        # Initialise lines to be used to analyse the foxiplot data file for correct reading
+
+        with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                if running_total == 0:
+                    line_for_analysis_1 = [float(value) for value in columns]
+                if running_total == 1:
+                    line_for_analysis_2 = [float(value) for value in columns]
+                if running_total == 2:
+                    line_for_analysis_3 = [float(value) for value in columns]
+                running_total+=1 # Also add to the running total
+                if running_total == 3: break # Finish once reached specified number of data points 
+        # Read off lines to be used to analyse the foxiplot data file for correct reading
+        
+        [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_lines(line_for_analysis_1,line_for_analysis_2,line_for_analysis_3)
+        # Read in lines, analyse and output useful information for reading the data file or return error
+
+        running_total = 0 # Initialize a running total of points read in from the chains
+
+        abslnB = np.zeros(number_of_models)
+        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
+        expected_abslnB_Eave = np.zeros(number_of_models)
+        # Initialize an the expected evidence-averaged version of abslnB
+        lnE = np.zeros(number_of_models)
+        # Initialize an array of values of the log evidence for the number of models
+        som_abslnB = np.zeros(number_of_models)
+        # Initialize an array of values of the second-moment of the absolute log Bayes factor for the number of models (reference model is element 0)
+        total_E = np.zeros(number_of_models)
+        # Initialize an array of values of the second-moment of the total evidence normalisation for the evidence-averaging
+        som_DKL = 0.0
+        # Initialize the second-moment of the Kullback-Leibler divergence 
+
+        expected_abslnB = [float(expected_lnB_and_DKL[value]) in range(0,len(expected_lnB_and_DKL)-1)]
+        expected_abslnB = np.asarray(expected_abslnB)  
+        expected_DKL = float(expected_lnB_and_DKL[len(expected_lnB_and_DKL)-1])
+        expected_DKL = np.asarray(expected_DKL) 
+        # Extract the expected utilities 
+
+        with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector = [] 
+                DKL = float(columns[len(columns)])
+                for j in range(0,len(columns)):
+                    if j < number_of_fiducial_point_dimensions: 
+                        fiducial_point_vector.append(float(columns[j]))
+                    if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
+                        abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                    if j > number_of_fiducial_point_dimensions + number_of_models and j < number_of_fiducial_point_dimensions + (2*number_of_models): 
+                        lnE[j - number_of_fiducial_point_dimensions - number_of_models - 1] = float(columns[j])
+                # Read in fiducial points and utilities from foxiplot data file                      
+
+                som_abslnB += (abslnB-expected_abslnB)**2 # Do quick vector additions to update second-moment utilities
+                som_DKL += (DKL-expected_DKL)**2  
+
+                for i in range(0,number_of_models):
+                    if lnE[i] - lnE[0] < 0.0 and i != 0: 
+                        expected_abslnB_Eave[i] += abslnB*np.exp(lnE[0]) 
+                        total_E += np.exp(lnE[0]) 
+                    if lnE[i] - lnE[0] > 0.0 and i != 0: 
+                        expected_abslnB_Eave[i] += abslnB*np.exp(lnE[i]) 
+                        total_E += np.exp(lnE[i]) 
+ 
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
+        
+        som_abslnB /= float(number_of_foxiplot_samples)
+        som_DKL /= float(number_of_foxiplot_samples)
+        expected_abslnB_Eave /= total_E # Normalise outputs
+        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "rerun_foxiout.txt",'w')
+        output_data_file.write(str(self.model_name_list) + ' [<|lnB|_E>_1, <|lnB|_E>_2, ...] = ' + str(expected_abslnB_Eave) + "\n") 
+        output_data_file.write(str(self.model_name_list) + ' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
+        output_data_file.write('< (DKL-<DKL>)^2 > = ' + str(som_DKL))
+        output_data_file.close()
 
 
     def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values):

@@ -553,7 +553,6 @@ class foxi:
                 # Making the lowest value 'true' white for style purposes          
 
                 axes.pcolormesh(x,y,z_values,cmap=my_cmap)
-                axes.set_aspect('equal')
                 axes.scatter(x_points,y_points,alpha=0.1)
                 # Generate the plot using pcolormesh and scatter
                 plt.axis([ranges[i+1][0],ranges[i+1][1]-x_step,ranges[i][0],ranges[i][1]-y_step])

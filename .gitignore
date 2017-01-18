@@ -11,6 +11,7 @@ foxipriors/bayesinf_li.txt
 foxipriors/bayesinf_rchi.txt
 foxipriors/bayesinf_rgi.txt
 foxiscripts/run_plateaus.py
+foxiscripts/run_1d_histogram.py
 foxiplots/foxiplot.pdf
 foxiplots/foxiplot_DKL.pdf
 foxioutput/foxiplots_data.txt

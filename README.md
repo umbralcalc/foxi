@@ -14,6 +14,16 @@ The decisivity between models (see arxiv:XXXXXXXX) its maximum-likelihood averag
 
 The expected Kullback-Leibler divergence (or information gain) of the futuristic dataset.
 
+## Main features
+
+Flexible inputs - usable essentially for any forecasting problem in science with suitable samples.
+
+Designed for all-in-one script calculation or an initial cluster run then local machine post-processing.
+
+LaTeX tables and plot making for post-data analysis visuals.
+
+User-friendly scripts with plenty of comments.
+
 ## Getting started
 
 To clone, simply type into the terminal:

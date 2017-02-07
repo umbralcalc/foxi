@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 rc('text',usetex=True)
 import pylab as pl
-from scipy.misc import logsumexp
 import matplotlib.cm as cm
 import corner
 
@@ -49,6 +48,7 @@ class foxi:
     def set_model_name_list(self,model_name_list): 
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
+        # Input the .txt or .dat file names in the foxipriors/ directory
 
 
     def set_column_types(self,column_types):
@@ -138,6 +138,11 @@ class foxi:
         # Initialize an array of values of the Bayesian evidence for the number of models (reference model is element 0)
         abslnB = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
+        valid_ML = np.zeros(len(self.model_name_list))
+        # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points in the 
+        # maximum-likelihood average for each of the model pairs (reference model is element 0 and is irrelevant)
+        ML_point = 0.0
+        # Maximum-likelihood point initialized
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
         forecast_data_function_normalisation = 0.0
@@ -156,6 +161,10 @@ class foxi:
                     if self.column_types_are_set == False: 
                         fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
                 forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
+                
+                if ML_point < forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector): ML_point = forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector) 
+                # Search for and save the maximum-likelihood point
+                
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
@@ -163,7 +172,7 @@ class foxi:
             
             running_total = 0 # Initialize a running total of points read in from each prior
 
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + 'bayesinf_' + self.model_name_list[i] + '.txt') as file:
+            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
                 for line in file:
                     columns = line.split()
@@ -174,6 +183,10 @@ class foxi:
                         if self.column_types_are_set == False: 
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
+                    
+                    if ML_point*np.exp(-5.0) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): valid_ML[i] = 1.0 
+                    # Decide on whether the maximum-likelihood point in the prior space is large enough for the maximum-likelihood average
+
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
@@ -209,7 +222,7 @@ class foxi:
                         fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-
+                
                 logargument = float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation
                 dkl = (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument)
                 if np.isnan(dkl) == False and logargument > 0.0: DKL += dkl # Conditions to avoid problems in the logarithm
@@ -217,7 +230,9 @@ class foxi:
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
-        return [abslnB,decisivity,DKL,np.log(E)] # Output utilities and raw log evidences
+        return [abslnB,decisivity,DKL,np.log(E),valid_ML] 
+        # Output utilities, raw log evidences and binary indicator variables in 'valid_ML' to either validate (1.0) or invalidate (0.0) the fiducial 
+        # point in the case of each model pair - this is used in the maximum-likelihood average procedure in rerun_foxi
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -229,8 +244,8 @@ class foxi:
         return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
 
 
-    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,foxiplot_data=False): 
-    # This is the main algorithm to compute expected utilites and compute other quantities
+    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 
+    # This is the main algorithm to compute the utilites and compute other quantities then output them to a file
         ''' 
         Quick usage and settings:
                  
@@ -251,11 +266,7 @@ class foxi:
         number_of_prior_points     =  The number of points specified to be read off from the prior
 
 
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector
-
-
-        foxiplot_data              =  Boolean to decide whether or not to output data for plotting the utilities
-                                      with the foxiplot tool    
+        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector    
 
 
         '''
@@ -270,17 +281,10 @@ class foxi:
         deci = np.zeros(len(self.model_name_list))
         # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
         abslnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
-        decisivity = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the full decisivity for the number of models (reference model is element 0)
-        expected_abslnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the expected absolute log Bayes factor for the number of models (reference model is element 0)
-        expected_DKL = 0.0
-        # Initialize the count for expected Kullback-Leibler divergence     
+        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
 
-        if foxiplot_data == True:
-            plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
-            # Initialize output files if outputting plot data
+        plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
+        # Initialize output files 
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -292,60 +296,45 @@ class foxi:
                         fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [abslnB,deci,DKL,lnE] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
-                decisivity = decisivity + deci 
-                expected_abslnB = expected_abslnB + abslnB # Do quick vector additions to update both expected utilities
-                expected_DKL += DKL
+                [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
                 
-                if foxiplot_data == True:
-                    for value in fiducial_point_vector:
-                        plot_data_file.write(str(value) + "\t")
-                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                    for value in abslnB:
-                        plot_data_file.write(str(value) + "\t")
-                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                    for value in lnE:
-                        plot_data_file.write(str(value) + "\t")
-                    plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                    plot_data_file.write(str(DKL) + "\n")
-                    # Write data to file if requested                    
+                for value in fiducial_point_vector:
+                    plot_data_file.write(str(value) + "\t") # Output fiducial point values
+                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                for value in abslnB:
+                    plot_data_file.write(str(value) + "\t") # Output absolute log Bayes factor values
+                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                for value in lnE:
+                    plot_data_file.write(str(value) + "\t") # Output raw log evidence values
+                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                for value in valid_ML:
+                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of maximum-likelihood average
+                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
+                plot_data_file.write(str(DKL) + "\n")
+                # Write data to file if requested                    
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
-        
-        expected_abslnB /= float(number_of_points)
-        decisivity /= float(number_of_points) 
-        expected_DKL /= float(number_of_points) # Normalise outputs
-        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiout.txt",'w') 
-        output_data_file.write(str(self.model_name_list) + ' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_abslnB) + "\n")
-        output_data_file.write(str(self.model_name_list) + ' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
-        output_data_file.write('<DKL> = ' + str(expected_DKL))
-        output_data_file.close()
-
-        if foxiplot_data == True:
-            plot_data_file.close()    
+       
+        plot_data_file.close()    
 
 
-    def rerun_foxi(self,foxiplot_samples,expected_lnB_and_DKL,number_of_foxiplot_samples): 
+    def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
-    #  (not deci) and also the utilities using evidence-weighted averageing are computed
+    # and also the utilities using maximum-likelihood averageing are computed. This two-step sequence is intended to simplify computing
+    # on a cluster
         ''' 
         Quick usage and settings:
                  
 
         foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file that is automatically read and interpreted
 
-
-        expected_lnB_and_DKL           =  A list structured like [<lnB>_1,<lnB>_2,...,<lnB>_N,<DKL>] of the expected utilities
-                                          calculated from the initial run of foxi, where N here is the number of models and 
-                                          element 0 is the reference model. IMPORTANT!! -> The <lnB> values MUST be in the same 
-                                          order as read in from the foxiplot output (or, equivalently, the same order as they 
-                                          were when they were first input into the run_foxi function with the arguments like
-                                          prior_column_numbers)   
-
-
         number_of_foxiplot_samples     =  The number of points specified to be read off from the foxiplot data file
+
+        predictive_prior_types         =  Takes a string as input, the choices are: 'flat' or 'log'
     
+        TeX_output                     =  Boolean - True outputs the utilities in TeX table format
+
 
         '''
 
@@ -378,97 +367,155 @@ class foxi:
 
         running_total = 0 # Initialize a running total of points read in from the foxiplot data file
 
+        predictive_prior_weight_total = 0.0
+        # The normalisation for the predictive prior weights
         abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
-        lnexpected_abslnB_Eave = np.zeros(number_of_models)
-        # Initialize an the log expected evidence-averaged version of abslnB
-        lnE = np.zeros(number_of_models)
-        # Initialize an array of values of the log evidence for the number of models
+        decisivity = np.zeros(number_of_models)
+        # Initialize an array of values of the full decisivity for the number of models (reference model is element 0)
+        expected_abslnB = np.zeros(number_of_models)
+        # Initialize an array of values of the expected absolute log Bayes factor for the number of models (reference model is element 0)
+        expected_abslnB_ML = np.zeros(number_of_models)
+        # Initialize an the expected maximum-likelihood-averaged version of abslnB
+        decisivity_ML = np.zeros(number_of_models)
+        # Initialize an the expected maximum-likelihood-averaged version of the decisivity
         som_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the second-moment of the absolute log Bayes factor for the number of models (reference model is element 0)
-        total_lnE = np.zeros(number_of_models)
-        # Initialize an array of values of the second-moment of the total log evidence normalisation for the evidence-averaging
+        som_abslnB_ML = np.zeros(number_of_models)
+        # Initialize som_abslnB for the maximum-likelihood average scheme
+        expected_DKL = 0.0
+        # Initialize the count for expected Kullback-Leibler divergence   
         som_DKL = 0.0
         # Initialize the second-moment of the Kullback-Leibler divergence  
-
-        expected_abslnB = [float(expected_lnB_and_DKL[value]) for value in range(0,len(expected_lnB_and_DKL)-1)]
-        expected_abslnB = np.asarray(expected_abslnB)  
-        expected_DKL = float(expected_lnB_and_DKL[len(expected_lnB_and_DKL)-1])
-        expected_DKL = np.asarray(expected_DKL) 
-        # Extract the expected utilities 
+        predictive_prior_weight = []
+        # Initialize the weights for the predictive prior
+        total_valid_ML = np.zeros(number_of_models)
+        # Initialize the additional normalisation factor for the maximum-likelihood average 
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
             for line in file:
                 columns = line.split()
                 fiducial_point_vector = [] 
+                valid_ML = []
+                DKL = float(columns[len(columns)-1])
+                for j in range(0,len(columns)):
+                    if j < number_of_fiducial_point_dimensions: 
+                        fiducial_point_vector.append(float(columns[j])) 
+                    if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3: 
+                        valid_ML.append(float(columns[j])) 
+                # Read in fiducial points from foxiplot data file  
+                
+                prior_weight = 1.0 # Initialize the prior weight unit value
+                for i in range(0,len(fiducial_point_vector)):
+                    if predictive_prior_types[i] == 'flat':
+                        prior_weight *= 1.0
+                    if predictive_prior_types[i] == 'log':
+                        prior_weight *= 1.0/fiducial_point_vector[i]           
+                predictive_prior_weight.append(prior_weight)
+                predictive_prior_weight_total += prior_weight
+                # Compute and store the predictive prior weights
+
+                valid_ML = np.asarray(valid_ML)
+                total_valid_ML += valid_ML*prior_weight # Add to normalisation total in maximum-likelihood average
+
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
+
+        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
+
+        with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector = [] 
+                valid_ML = []
                 DKL = float(columns[len(columns)-1])
                 for j in range(0,len(columns)):
                     if j < number_of_fiducial_point_dimensions: 
                         fiducial_point_vector.append(float(columns[j]))
                     if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
                         abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
-                    if j > number_of_fiducial_point_dimensions + number_of_models and j < number_of_fiducial_point_dimensions + (2*number_of_models): 
-                        lnE[j - number_of_fiducial_point_dimensions - number_of_models - 1] = float(columns[j])
+                    if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
+                        valid_ML.append(float(columns[j]))
+                # Read in fiducial points, maximum-likelihood points and utilities from foxiplot data file                      
+
+                deci = np.zeros(number_of_models)
+                # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
+                for i in range(0,number_of_models):
+                    if abslnB[i] >= 5.0: deci[i] = 1.0
+                # Quickly compute the decisivity contribution using the absolute log Bayes factor for each model 
+
+                valid_ML = np.asarray(valid_ML)
+                decisivity = decisivity + (deci*predictive_prior_weight[running_total]/predictive_prior_weight_total) 
+                expected_abslnB = expected_abslnB + (abslnB*predictive_prior_weight[running_total]/predictive_prior_weight_total) 
+                decisivity_ML = decisivity_ML + (valid_ML*predictive_prior_weight[running_total]*deci/total_valid_ML) 
+                expected_abslnB_ML = expected_abslnB_ML + (valid_ML*predictive_prior_weight[running_total]*abslnB/total_valid_ML) # Do quick vector additions to update the expected utilities
+                expected_DKL += (DKL*predictive_prior_weight[running_total])
+
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
+        # Computed the expected utilities in the above loop
+
+        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
+
+        with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
+        # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
+            for line in file:
+                columns = line.split()
+                fiducial_point_vector = [] 
+                valid_ML = []
+                DKL = float(columns[len(columns)-1])
+                for j in range(0,len(columns)):
+                    if j < number_of_fiducial_point_dimensions: 
+                        fiducial_point_vector.append(float(columns[j]))
+                    if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
+                        abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                    if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
+                        valid_ML.append(float(columns[j]))
                 # Read in fiducial points and utilities from foxiplot data file                      
 
-                som_abslnB += (abslnB-expected_abslnB)**2 # Do quick vector additions to update second-moment utilities
-                som_DKL += (DKL-expected_DKL)**2  
+                predictive_prior_weights = [predictive_prior_weight[running_total] for k in range(0,number_of_models)]
+                predictive_prior_weights = np.asarray(predictive_prior_weights)
+                # Create an array (one value per model) of prior weights for each sample
+
+                valid_ML = np.asarray(valid_ML)
+                som_abslnB += (((abslnB-expected_abslnB)**2)*predictive_prior_weights) 
+                som_abslnB_ML += (((abslnB-expected_abslnB_ML)**2)*(valid_ML/total_valid_ML)) # Do quick vector additions to update second-moment utilities
+                som_DKL += (((DKL-expected_DKL)**2)*predictive_prior_weight[running_total])
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
         # Computed the second-moment utilities in the above loop
 
-        for i in range(0,number_of_models):
-        # Loop over models each time of reading all of the points to reduce memory issues
-            lnE_weighting = []
-            lnabslnB_plus_lnE_weighting = []
-            # Lists to store values in order to compute evidence-averaged quantities in logsumexp
- 
-            running_total = 0 # Initialize a running total of points read in from the foxiplot data file
-
-            with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
-                for line in file:
-                    columns = line.split()
-                    fiducial_point_vector = [] 
-                    DKL = float(columns[len(columns)-1])
-                    for j in range(0,len(columns)):
-                        if j < number_of_fiducial_point_dimensions: 
-                             fiducial_point_vector.append(float(columns[j]))
-                        if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
-                             abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
-                        if j > number_of_fiducial_point_dimensions + number_of_models and j < number_of_fiducial_point_dimensions + (2*number_of_models): 
-                            lnE[j - number_of_fiducial_point_dimensions - number_of_models - 1] = float(columns[j])
-                            # Read in fiducial points and utilities from foxiplot data file                                   
-                    
-                    if lnE[i] - lnE[0] <= 0.0 and i != 0:
-                        lnE_weighting.append(lnE[0]) 
-                        lnabslnB_plus_lnE_weighting.append(np.log(abslnB[i])+lnE[0])
-                    if lnE[i] - lnE[0] > 0.0 and i != 0: 
-                        lnE_weighting.append(lnE[i])
-                        lnabslnB_plus_lnE_weighting.append(np.log(abslnB[i])+lnE[i])
-                    # Store weightings in their respective lists in order to compute them in logsumexp (avoids overflow/underflow problems)
-           
-                    running_total+=1 # Also add to the running total
-                    if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points        
-
-            if i != 0: 
-                total_lnE[i] = logsumexp(lnE_weighting)
-                lnexpected_abslnB_Eave[i] = logsumexp(lnabslnB_plus_lnE_weighting)
-            # Compute the quantities if not in the reference model index 0
-            # Calculating this way avoids overflow/underflow problems
-
-        som_abslnB /= float(number_of_foxiplot_samples)
-        som_DKL /= float(number_of_foxiplot_samples) 
-        lnexpected_abslnB_Eave = lnexpected_abslnB_Eave - total_lnE   
         # Normalise outputs and avoid NAN values + infinite values
-        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "rerun_foxiout.txt",'w')
-        output_data_file.write(str(self.model_name_list) + ' [<|lnB|_E>_1, <|lnB|_E>_2, ...] = ' + str(np.exp(lnexpected_abslnB_Eave)) + "\n") 
-        output_data_file.write(str(self.model_name_list) + ' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
+        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_summary.txt",'w')
+        output_data_file.write(' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_abslnB) + "\n")
+        output_data_file.write(' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
+        output_data_file.write('<DKL> = ' + str(expected_DKL) + "\n")
+        output_data_file.write(' [<|lnB|_ML>_1, <|lnB|_ML>_2, ...] = ' + str(expected_abslnB_ML) + "\n") 
+        output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
+        output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1_ML)^2 >_ML, < (|lnB|_2 - <|lnB|>_2_ML)^2 >_ML, ...] = ' + str(som_abslnB_ML) + "\n")
+        output_data_file.write(' [DECI_1|_ML, DECI_2|_ML, ...] = ' + str(decisivity_ML) + "\n")
         output_data_file.write('< (DKL-<DKL>)^2 > = ' + str(som_DKL))
         output_data_file.close()
-        # Output data to `rerun_foxiout.txt'
+        # Output data to `foxiplots_data_summary.txt'
+
+        if TeX_output == True:
+            output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_summary_TeX.txt",'w')
+            output_data_file.write(r'\begin{table}' + '\n')
+            output_data_file.write('\centering' + '\n')
+            output_data_file.write(r'\begin{tabular}{|c|c|c|c|c|}' + '\n')
+            output_data_file.write('\cline{2-5}' + '\n')
+            output_data_file.write(r'\multicolumn{1}{c}{\cellcolor{red!55}} & \multicolumn{4}{|c|}{Data Name}  \\      \hline' + '\n')
+            output_data_file.write(r'\backslashbox{$\calM_\beta$ - $\calM_\gamma$}{$\langle  U\rangle$}  & $\langle \ln {\rm B}_{\beta \gamma}\rangle$ & $\langle \ln {\rm B}_{\beta \gamma}\rangle_{{}_{\rm ML}}$ & $\deci_{\beta \gamma}$ & $\deci_{\beta \gamma}\vert_{{}_{\rm ML}}$  \\     \hline\hline' + '\n')
+            for k in range(0,number_of_models):
+                output_data_file.write('Model Pair ' + str(k) + ' & ' + str(expected_abslnB[k]) + ' $\pm$ ' + str(np.sqrt(som_abslnB[k])) + ' & ' + str(expected_abslnB_ML[k]) + ' $\pm$ ' + str(np.sqrt(som_abslnB_ML[k])) + ' & ' + str(decisivity[k]) + ' & ' + str(decisivity_ML[k]) + r'  \\      \hline' + '\n')
+            output_data_file.write('\end{tabular}' + '\n')
+            output_data_file.write('\caption{Blah blah blah table...}' + '\n')
+            output_data_file.write('\end{table}' + '\n')
+            output_data_file.close()
+            # Output data to `foxiplots_data_summary_TeX.txt' - TeX format
 
 
     def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values,corner_plot=False):
@@ -570,7 +617,7 @@ class foxi:
                 # Saving output to foxiplots/
 
         if corner_plot == True:
-            figure = corner.corner(points,bins=number_of_bins,color='r',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
+            figure = corner.corner(points,bins=number_of_bins,color='m',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
         # Use corner to plot the samples 
 
             figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)

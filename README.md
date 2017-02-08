@@ -18,6 +18,12 @@ Flexible inputs – usable essentially for any forecasting problem in science wi
 
 ## Getting started
 
-To clone, simply type into the terminal:
-
+To fork, simply type into the terminal:
+>
 > git clone https://github.com/umbralcalc/foxi.git 
+>
+...then enter the scripts directory
+>
+> cd foxi/foxiscripts
+>
+and take a look!

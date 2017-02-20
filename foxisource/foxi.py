@@ -451,7 +451,7 @@ class foxi:
                 expected_abslnB = expected_abslnB + (abslnB*predictive_prior_weight[running_total]/predictive_prior_weight_total) 
                 decisivity_ML = decisivity_ML + (valid_ML*predictive_prior_weight[running_total]*deci/total_valid_ML) 
                 expected_abslnB_ML = expected_abslnB_ML + (valid_ML*predictive_prior_weight[running_total]*abslnB/total_valid_ML) # Do quick vector additions to update the expected utilities
-                expected_DKL += (DKL*predictive_prior_weight[running_total])
+                expected_DKL += (DKL*predictive_prior_weight[running_total]/predictive_prior_weight_total)
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
@@ -482,7 +482,7 @@ class foxi:
                 valid_ML = np.asarray(valid_ML)
                 som_abslnB += (((abslnB-expected_abslnB)**2)*predictive_prior_weights) 
                 som_abslnB_ML += (((abslnB-expected_abslnB_ML)**2)*(valid_ML/total_valid_ML)) # Do quick vector additions to update second-moment utilities
-                som_DKL += (((DKL-expected_DKL)**2)*predictive_prior_weight[running_total])
+                som_DKL += (((DKL-expected_DKL)**2)*predictive_prior_weight[running_total]/predictive_prior_weight_total)
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 

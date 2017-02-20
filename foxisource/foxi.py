@@ -435,7 +435,11 @@ class foxi:
                     if j < number_of_fiducial_point_dimensions: 
                         fiducial_point_vector.append(float(columns[j]))
                     if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
-                        abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                        if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
+                            abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                        else:
+                            abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
+                        # Overall if else to avoid NANs and infinite values
                     if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
                         valid_ML.append(float(columns[j]))
                 # Read in fiducial points, maximum-likelihood points and utilities from foxiplot data file                      
@@ -470,7 +474,11 @@ class foxi:
                     if j < number_of_fiducial_point_dimensions: 
                         fiducial_point_vector.append(float(columns[j]))
                     if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
-                        abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                        if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
+                            abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                        else:
+                            abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
+                        # Overall if else to avoid NANs and infinite values
                     if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
                         valid_ML.append(float(columns[j]))
                 # Read in fiducial points and utilities from foxiplot data file                      

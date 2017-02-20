@@ -510,7 +510,7 @@ class foxi:
             output_data_file.write(r'\multicolumn{1}{c}{\cellcolor{red!55}} & \multicolumn{4}{|c|}{Data Name}  \\      \hline' + '\n')
             output_data_file.write(r'\backslashbox{$\calM_\beta$ - $\calM_\gamma$}{$\langle  U\rangle$}  & $\langle \ln {\rm B}_{\beta \gamma}\rangle$ & $\langle \ln {\rm B}_{\beta \gamma}\rangle_{{}_{\rm ML}}$ & $\deci_{\beta \gamma}$ & $\deci_{\beta \gamma}\vert_{{}_{\rm ML}}$  \\     \hline\hline' + '\n')
             for k in range(0,number_of_models):
-                output_data_file.write('Model Pair ' + str(k) + ' & ' + str(expected_abslnB[k]) + ' $\pm$ ' + str(np.sqrt(som_abslnB[k])) + ' & ' + str(expected_abslnB_ML[k]) + ' $\pm$ ' + str(np.sqrt(som_abslnB_ML[k])) + ' & ' + str(decisivity[k]) + ' & ' + str(decisivity_ML[k]) + r'  \\      \hline' + '\n')
+                output_data_file.write('Model Pair ' + str(k) + ' & ' + str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2)) + ' & ' + str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + r'  \\      \hline' + '\n')
             output_data_file.write('\end{tabular}' + '\n')
             output_data_file.write('\caption{Blah blah blah table...}' + '\n')
             output_data_file.write('\end{table}' + '\n')

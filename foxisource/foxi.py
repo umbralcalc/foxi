@@ -98,7 +98,7 @@ class foxi:
             # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
-    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector):
+    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False):
     # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
         DKL_utility_function: 
@@ -128,19 +128,30 @@ class foxi:
 
         error_vector                           =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector 
 
+        
+        mix_models                             =  Boolean - True outputs U in all combinations of model comparison i.e. {i not j} U(M_i-M_j)
+                                                          - False outputs U for all models wrt the reference model i.e. {i=1,...,N} U(M_i-M_0)  
+
 
         '''
 
+        if mix_models == False:
+            number_of_model_pairs = len(self.model_name_list)
+            # The number of models where the utility reference model is element 0
+        if mix_models == True:
+            number_of_model_pairs = len(self.model_name_list) + ((len(self.model_name_list))*(len(self.model_name_list)-1)/2)
+            # The number of possible model pairs to be computed, making use of Binomial Theorem  
 
-        decisivity = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the decisivity for the number of models (reference model is element 0)
-        E = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the Bayesian evidence for the number of models (reference model is element 0)
-        abslnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)
-        valid_ML = np.zeros(len(self.model_name_list))
+        decisivity = np.zeros(number_of_model_pairs)
+        # Initialize an array of values of the decisivity for the number of model pairs
+        E = np.zeros(number_of_model_pairs)
+        # Initialize an array of values of the Bayesian evidence for the number of model pairs
+        abslnB = np.zeros(number_of_model_pairs)
+        # Initialize an array of values of the absolute log Bayes factor for the number of model pairs
+        valid_ML = np.zeros(number_of_model_pairs)
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points in the 
-        # maximum-likelihood average for each of the model pairs (reference model is element 0 and is irrelevant)
+        # maximum-likelihood average for each of the model pairs 
+
         ML_point = 0.0
         # Maximum-likelihood point initialized
         DKL = 0.0
@@ -191,25 +202,55 @@ class foxi:
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
+        if mix_models == True: 
+            avoid_repeat = 0
+            # Initialize a variable to iterate through the loop to avoid overcounting in `mix_model mode'
+            count_elements = 0
+            # Count the elements to the arrays listing U for each model pair on the fly
+ 
         for j in range(0,len(self.model_name_list)):      
-        # Summation over the model priors    
-            if E[j] == 0.0:
-                if E[0] == 0.0:
-                    abslnB[j] = 0.0
-                else:
-                    abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
-            if E[0] == 0.0:
+        # Summation over the model priors 
+            if mix_models == False:   
                 if E[j] == 0.0:
-                    abslnB[j] = 0.0
+                    if E[0] == 0.0:
+                        abslnB[j] = 0.0
+                    else:
+                        abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
+                if E[0] == 0.0:
+                    if E[j] == 0.0:
+                        abslnB[j] = 0.0
+                    else:
+                        abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
                 else:
-                    abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
-            else:
-                abslnB[j] = abs(np.log(E[j]) - np.log(E[0])) # Compute absolute log Bayes factor utility
-            # The block above deals with unruly values like 0.0 inside the logarithms
+                    abslnB[j] = abs(np.log(E[j]) - np.log(E[0])) # Compute absolute log Bayes factor utility
+                # The block above deals with unruly values like 0.0 inside the logarithms
 
-            if abs(np.log(E[j]) - np.log(E[0])) >= 5.0:
-                if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
+                if abs(np.log(E[j]) - np.log(E[0])) >= 5.0:
+                    if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0)            
+ 
+            if mix_models == True: 
+                for k in range(avoid_repeat,len(self.model_name_list)):      
+                # Two-fold summation over the model priors if in `mix_model mode' 
+                    if E[j] == 0.0:
+                        if E[k] == 0.0:
+                            abslnB[count_elements] = 0.0
+                        else:
+                            abslnB[count_elements] = 1000.0 # Maximal permitted value for an individual sample
+                    if E[k] == 0.0:
+                        if E[j] == 0.0:
+                            abslnB[count_elements] = 0.0
+                        else:
+                            abslnB[count_elements] = 1000.0 # Maximal permitted value for an individual sample
+                    else:
+                        abslnB[count_elements] = abs(np.log(E[k])-np.log(E[j])) # Compute absolute log Bayes factor utility
+                    # The block above deals with unruly values like 0.0 inside the logarithms
 
+                    if abs(np.log(E[k])-np.log(E[j])) >= 5.0:
+                        if j > 0: decisivity[count_elements] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0) 
+                    count_elements+=1 # Iterate the element counter for the arrays           
+
+                avoid_repeat+=1 # Iterate the avoidance of repeating a model pair in the two-fold loop 
+                
         running_total = 0 # Initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
@@ -244,7 +285,7 @@ class foxi:
         return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
 
 
-    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector): 
+    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,mix_models=False): 
     # This is the main algorithm to compute the utilites and compute other quantities then output them to a file
         ''' 
         Quick usage and settings:
@@ -266,7 +307,11 @@ class foxi:
         number_of_prior_points     =  The number of points specified to be read off from the prior
 
 
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector    
+        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector  
+
+
+        mix_models                 =  Boolean - True computes U in all combinations of model comparison i.e. {i not j} U(M_i-M_j)
+                                              - False computes U for all models wrt the reference model i.e. {i=1,...,N} U(M_i-M_0)  
 
 
         '''
@@ -278,13 +323,25 @@ class foxi:
 
         running_total = 0 # Initialize a running total of points read in from the chains
 
-        deci = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-        abslnB = np.zeros(len(self.model_name_list))
-        # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
+        if mix_models == False:
+            deci = np.zeros(len(self.model_name_list))
+            # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
+            abslnB = np.zeros(len(self.model_name_list))
+            # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
 
-        plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
-        # Initialize output files 
+            plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
+            # Initialize output files 
+
+        if mix_models == True:
+            possible_model_pairs = len(self.model_name_list) + ((len(self.model_name_list))*(len(self.model_name_list)-1)/2)
+            # The number of possible distinct model pairs, making use of Binomial Theorem
+            deci = np.zeros(possible_model_pairs)
+            # Initialize an array of values of the decisivity utility function for the possible number of distinct model pairs 
+            abslnB = np.zeros(possible_model_pairs)
+            # Initialize an array of values of the absolute log Bayes factor for the possible number of distinct model pairs 
+
+            plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
+            # Initialize output files in thec case where all possible model combinations are tried within each utility
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -296,7 +353,7 @@ class foxi:
                         fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
                     if self.column_types_are_set == False: 
                         fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
-                [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector)
+                [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=mix_models)
                 
                 for value in fiducial_point_vector:
                     plot_data_file.write(str(value) + "\t") # Output fiducial point values
@@ -327,11 +384,16 @@ class foxi:
         Quick usage and settings:
                  
 
-        foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file that is automatically read and interpreted
+        foxiplot_samples               =  Name of an (un-edited) 'foxiplots_data.txt' file (or 'foxiplots_data_mix_models.txt' file) 
+                                          that will be automatically read and interpreted
+
 
         number_of_foxiplot_samples     =  The number of points specified to be read off from the foxiplot data file
 
-        predictive_prior_types         =  Takes a string as input, the choices are: 'flat' or 'log'
+
+        predictive_prior_types         =  Takes a string as input, the choices are: 'flat' or 'log' - note that changing between 
+                                          these can cause issues numerically if there are not enough points  
+
     
         TeX_output                     =  Boolean - True outputs the utilities in TeX table format
 

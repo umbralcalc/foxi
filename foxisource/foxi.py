@@ -148,9 +148,12 @@ class foxi:
         # Initialize an array of values of the Bayesian evidence for the number of model pairs
         abslnB = np.zeros(number_of_model_pairs)
         # Initialize an array of values of the absolute log Bayes factor for the number of model pairs
-        valid_ML = np.zeros(number_of_model_pairs)
+        model_valid_ML = np.zeros(len(self.model_name_list))
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points in the 
-        # maximum-likelihood average for each of the model pairs 
+        # maximum-likelihood average for each of the models 
+        valid_ML = np.zeros(number_of_model_pairs)
+        # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points showing
+        # in the case where either one of the two models has model_valid_ML[i] = 1.0 or 0.0, respectively
 
         ML_point = 0.0
         # Maximum-likelihood point initialized
@@ -195,7 +198,7 @@ class foxi:
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     
-                    if ML_point*np.exp(-5.0) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): valid_ML[i] = 1.0 
+                    if ML_point*np.exp(-5.0) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
                     # Decide on whether the maximum-likelihood point in the prior space is large enough for the maximum-likelihood average
 
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
@@ -210,7 +213,12 @@ class foxi:
  
         for j in range(0,len(self.model_name_list)):      
         # Summation over the model priors 
-            if mix_models == False:   
+            if mix_models == False: 
+                if model_valid_ML[j] == 1.0 or model_valid_ML[0] == 1.0:
+                    valid_ML[j] = 1.0
+                # Decide on whether the point is to be included within the average utility for this
+                # specific model pair (model j and the reference model 0)
+  
                 if E[j] == 0.0:
                     if E[0] == 0.0:
                         abslnB[j] = 0.0
@@ -231,6 +239,11 @@ class foxi:
             if mix_models == True: 
                 for k in range(avoid_repeat,len(self.model_name_list)):      
                 # Two-fold summation over the model priors if in `mix_model mode' 
+                    if model_valid_ML[k] == 1.0 or model_valid_ML[j] == 1.0:
+                        valid_ML[count_elements] = 1.0
+                    # Decide on whether the point is to be included within the average utility for this
+                    # specific model pair (model k and the reference model j)
+
                     if E[j] == 0.0:
                         if E[k] == 0.0:
                             abslnB[count_elements] = 0.0

@@ -32,9 +32,12 @@ class foxi:
         self.gaussian_forecast
         self.flashy_foxi
         self.set_column_types
+        self.set_prior_column_types
         self.column_types = []
+        self.prior_column_types = []
         self.column_functions 
         self.column_types_are_set = False
+        self.prior_column_types_are_set = False
         self.add_axes_labels
         self.axes_labels = []
         self.fontsize = 15
@@ -52,16 +55,27 @@ class foxi:
 
 
     def set_column_types(self,column_types):
-    # Input a list of strings to set the format of each column in both prior and data chains i.e. flat, log, log10, ...
+    # Input a list of strings to set the format of each column in data chains i.e. flat, log, log10, ...
         self.column_types = column_types
         self.column_types_are_set = True # All columns are as input unless this is True
 
 
-    def column_functions(self,i,input_value):
+    def set_prior_column_types(self,column_types):
+    # Input a list of strings to set the format of each column in prior samples i.e. flat, log, log10, ...
+        self.prior_column_types = column_types
+        self.prior_column_types_are_set = True # All columns are as input unless this is True
+
+
+    def column_functions(self,i,input_value,prior=False):
     # Choose to transform whichever column according to its format
-        if self.column_types[i] == 'flat': return input_value
-        if self.column_types[i] == 'log': return np.exp(input_value)
-        if self.column_types[i] == 'log10': return 10.0**(input_value)
+        if prior == False:
+            if self.column_types[i] == 'flat': return input_value
+            if self.column_types[i] == 'log': return np.exp(input_value)
+            if self.column_types[i] == 'log10': return 10.0**(input_value)
+        if prior == True:
+            if self.prior_column_types[i] == 'flat': return input_value
+            if self.prior_column_types[i] == 'log': return np.exp(input_value)
+            if self.prior_column_types[i] == 'log10': return 10.0**(input_value)
 
 
     def add_axes_labels(self,list_of_labels,fontsize):
@@ -192,9 +206,9 @@ class foxi:
                     columns = line.split()
                     prior_point_vector = [] 
                     for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                        if self.column_types_are_set == True: 
-                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]])))
-                        if self.column_types_are_set == False: 
+                        if self.prior_column_types_are_set == True: 
+                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
+                        if self.prior_column_types_are_set == False: 
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     

@@ -216,7 +216,7 @@ class foxi:
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     
-                    if ML_point*np.exp(-(ML_threshold**2.0)) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
+                    if ML_point*np.exp(-0.5*(ML_threshold**2.0)) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
                     # Decide on whether the maximum-likelihood point in the prior space is large enough for the maximum-likelihood average
 
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model

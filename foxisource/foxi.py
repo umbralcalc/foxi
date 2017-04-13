@@ -112,7 +112,7 @@ class foxi:
             # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
-    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=5.0):
+    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=7.0):
     # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
         DKL_utility_function: 
@@ -147,8 +147,8 @@ class foxi:
                                                           - False outputs U for all models wrt the reference model i.e. {i=1,...,N} U(M_i-M_0)  
 
 
-        ML_threshold                           =  The number of `sigma's' away from the maximum likelihood to be classed as `ruled out' with
-                                                  respect to the Maximum Likelihood Average 
+        ML_threshold                           =  The threshold in the ln Bayes factor to be classed as `ruled out' with
+                                                  respect to the maximum Marginal Likelihood model
 
 
         '''
@@ -168,13 +168,13 @@ class foxi:
         # Initialize an array of values of the absolute log Bayes factor for the number of model pairs
         model_valid_ML = np.zeros(len(self.model_name_list))
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points in the 
-        # maximum-likelihood average for each of the models 
+        # marginal likelihood average for each of the models 
         valid_ML = np.zeros(number_of_model_pairs)
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points showing
         # in the case where either one of the two models has model_valid_ML[i] = 1.0 or 0.0, respectively
 
         ML_point = 0.0
-        # Maximum-likelihood point initialized
+        # maximum Marginal likelihood model initialized
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
         forecast_data_function_normalisation = 0.0
@@ -195,7 +195,7 @@ class foxi:
                 forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
                 
                 if ML_point < forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector): ML_point = forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector) 
-                # Search for and save the maximum-likelihood point
+                # Search for and save the maximum Marginal Likelihood model point
                 
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
@@ -215,13 +215,14 @@ class foxi:
                         if self.prior_column_types_are_set == False: 
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
-                    
-                    if ML_point*np.exp(-0.5*(ML_threshold**2.0)) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
-                    # Decide on whether the maximum-likelihood point in the prior space is large enough for the maximum-likelihood average
 
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+
+        for i in range(0,len(self.model_name_list)):
+            if ML_point*np.exp(-ML_threshold) < E[i]: model_valid_ML[i] = 1.0 
+                    # Decide on whether the maximum marginal likelihood point in the prior space is large enough to satisfy ML averageing for each model 
 
         if mix_models == True: 
             avoid_repeat = 0
@@ -304,7 +305,7 @@ class foxi:
 
         return [abslnB,decisivity,DKL,np.log(E),valid_ML] 
         # Output utilities, raw log evidences and binary indicator variables in 'valid_ML' to either validate (1.0) or invalidate (0.0) the fiducial 
-        # point in the case of each model pair - this is used in the maximum-likelihood average procedure in rerun_foxi
+        # point in the case of each model pair - this is used in the Marginal Likelihood average procedure in rerun_foxi
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -396,7 +397,7 @@ class foxi:
                     plot_data_file.write(str(value) + "\t") # Output raw log evidence values
                 plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                 for value in valid_ML:
-                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of maximum-likelihood average
+                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of Marginal Likelihood average
                 plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                 plot_data_file.write(str(DKL) + "\n")
                 # Write data to file if requested                    
@@ -409,7 +410,7 @@ class foxi:
 
     def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
-    # and also the utilities using maximum-likelihood averageing are computed. This two-step sequence is intended to simplify computing
+    # and also the utilities using Marginal-Likelihood averageing are computed. This two-step sequence is intended to simplify computing
     # on a cluster
         ''' 
         Quick usage and settings:
@@ -467,21 +468,21 @@ class foxi:
         expected_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the expected absolute log Bayes factor for the number of models (reference model is element 0)
         expected_abslnB_ML = np.zeros(number_of_models)
-        # Initialize an the expected maximum-likelihood-averaged version of abslnB
+        # Initialize an the expected Marginal-Likelihood-averaged version of abslnB
         decisivity_ML = np.zeros(number_of_models)
-        # Initialize an the expected maximum-likelihood-averaged version of the decisivity
+        # Initialize an the expected Marginal-Likelihood-averaged version of the decisivity
         som_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the second-moment of the absolute log Bayes factor for the number of models (reference model is element 0)
         som_abslnB_ML = np.zeros(number_of_models)
-        # Initialize som_abslnB for the maximum-likelihood average scheme
+        # Initialize som_abslnB for the Marginal Likelihood average scheme
         proportion_of_ML_failures = np.zeros(number_of_models)
-        # Initialize the volume ratio of the fiducial point space associated to immediate disfavouring of both models due to the maximum likelihood of both models being too low 
+        # Initialize the volume ratio of the fiducial point space associated to immediate disfavouring of both models due to the Bayesian evidence of both models being too low when compared with the maximum Marginal Likelihood model
         expected_DKL = 0.0
         # Initialize the count for expected Kullback-Leibler divergence   
         som_DKL = 0.0
         # Initialize the second-moment of the Kullback-Leibler divergence  
         total_valid_ML = np.zeros(number_of_models)
-        # Initialize the additional normalisation factor for the maximum-likelihood average  
+        # Initialize the additional normalisation factor for the Marginal-Likelihood average  
 
         running_total = 0 # Initialize a running total of points read in from the foxiplot data file
 
@@ -506,7 +507,7 @@ class foxi:
                         valid_ML.append(float(columns[j]))
                         if float(columns[j]) == 0.0: invalid_ML.append(1.0)
                         if float(columns[j]) == 1.0: invalid_ML.append(0.0)
-                # Read in fiducial points, maximum-likelihood points, invalid maximum-likelihood points and utilities from foxiplot data file                          
+                # Read in fiducial points, Marginal-Likelihood points, invalid Marginal-Likelihood points and utilities from foxiplot data file                          
 
                 predictive_prior_weight = 1.0 # Initialize the prior weight unit value
                 for i in range(0,len(fiducial_point_vector)):
@@ -534,7 +535,7 @@ class foxi:
                 expected_DKL += (DKL*predictive_prior_weight)
 
                 proportion_of_ML_failures = proportion_of_ML_failures + (invalid_ML*predictive_prior_weight) 
-                # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both models due to the maximum likelihood of both models being too low 
+                # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both because their Bayesian evidences are too low when compared with the maximum Marginal Likelihood model
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 

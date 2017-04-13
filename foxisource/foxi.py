@@ -112,7 +112,7 @@ class foxi:
             # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
-    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False):
+    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=5.0):
     # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
         DKL_utility_function: 
@@ -145,6 +145,10 @@ class foxi:
         
         mix_models                             =  Boolean - True outputs U in all combinations of model comparison i.e. {i not j} U(M_i-M_j)
                                                           - False outputs U for all models wrt the reference model i.e. {i=1,...,N} U(M_i-M_0)  
+
+
+        ML_threshold                           =  The number of `sigma's' away from the maximum likelihood to be classed as `ruled out' with
+                                                  respect to the Maximum Likelihood Average 
 
 
         '''
@@ -212,7 +216,7 @@ class foxi:
                             prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     
-                    if ML_point*np.exp(-5.0) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
+                    if ML_point*np.exp(-(ML_threshold**2.0)) < forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector): model_valid_ML[i] = 1.0 
                     # Decide on whether the maximum-likelihood point in the prior space is large enough for the maximum-likelihood average
 
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model

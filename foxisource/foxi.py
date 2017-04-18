@@ -42,8 +42,6 @@ class foxi:
         self.add_axes_labels
         self.axes_labels = []
         self.fontsize = 15
-        self.set_prior_density_method
-        self.prior_density_method = 'raw'
         
 
     def set_chains(self,name_of_chains): 
@@ -55,20 +53,6 @@ class foxi:
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
         # Input the .txt or .dat file names in the foxipriors/ directory
-
-    
-    def set_prior_density_method(self,method):
-        '''
-        Change the density estimation method for each prior in the list to one of two options:
-        
-        'raw'     -  Make use of the raw samples directly. This can be safely used when the typical
-                     prior sample distances are smaller than the 1-sigma contour distance of the error_vector
-        
-        'kde'     -  Use a local density estimation for the prior and compute the evidence at the fiducial
-                     point in each case. This makes the result independent of error_vector
-        
-        '''
-        self.prior_density_method = method        
 
 
     def set_column_types(self,column_types):
@@ -129,7 +113,7 @@ class foxi:
             # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
-    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=7.0):
+    def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=5.0):
     # The Kullback-Leibler divergence utility function defined in arxiv:1639.3933
         '''
         DKL_utility_function: 
@@ -164,8 +148,8 @@ class foxi:
                                                           - False outputs U for all models wrt the reference model i.e. {i=1,...,N} U(M_i-M_0)  
 
 
-        ML_threshold                           =  The threshold in the ln Bayes factor to be classed as `ruled out' with
-                                                  respect to the maximum Marginal Likelihood model
+        ML_threshold                           =  The threshold in the MLE of a model prior to be classed as `ruled out' with
+                                                  respect to the Maximum Likelihood 
 
 
         '''
@@ -185,13 +169,13 @@ class foxi:
         # Initialize an array of values of the absolute log Bayes factor for the number of model pairs
         model_valid_ML = np.zeros(len(self.model_name_list))
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points in the 
-        # marginal likelihood average for each of the models 
+        # Maximum Likelihood average for each of the models 
         valid_ML = np.zeros(number_of_model_pairs)
         # Initialize an array of binary indicator variables - containing either valid (1.0) or invalid (0.0) points showing
         # in the case where either one of the two models has model_valid_ML[i] = 1.0 or 0.0, respectively
 
-        ML_point = 0.0
-        # maximum Marginal likelihood model initialized
+        ML_point = forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
+        # The maximum Maximum Likelihood point is trivial to find
         DKL = 0.0
         # Initialise the integral count Kullback-Leibler divergence at 0.0
         forecast_data_function_normalisation = 0.0
@@ -212,46 +196,56 @@ class foxi:
                 forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
                 # Compute the normalisation for the dkl value later on...                
 
-                if self.prior_density_method == 'raw':
-                # Search for and save the maximum Marginal Likelihood model point if using the 'raw' method
-                    if ML_point < forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector): ML_point = forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector) 
-                if self.prior_density_method == 'kde':
-                # If using the 'kde' method then the maximum Marginal Likelihood model point is trivial to find
-                    ML_point = forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
-
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
         for i in range(0,len(self.model_name_list)):
             
             running_total = 0 # Initialize a running total of points read in from each prior
+ 
+            model_ML = self.density_functions[i].pdf(fiducial_point_vector)*forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
+            # Kernel Density Estimation using the statsmodels.nonparametric toolkit to estimate the 
+            # density locally at the fiducial point itself. This can protect against finite sampling scale effects
+               
+            samples_ok = True 
+            for k in range(0,len(error_vector)):
+                if np.sqrt(self.density_functions[i].bw[k]) > error_vector[k]:
+                    samples_ok = False
+            # Use the KDE bandwidths to work out whether using the prior samples directly 
+            # is an appropriate way to estimate the evidence or not            
 
-            if self.prior_density_method == 'kde':
-            # If set to using Kernel Density Estimation then the statsmodels.nonparametric toolkit is used to estimate the 
-            # density locally at the fiducial point itself 
-                E[i] = self.density_functions[i].pdf(fiducial_point_vector)*forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
-
-            if self.prior_density_method == 'raw':
-            # If set to using raw samples then a straightforward computation proceeds
+            if samples_ok == True:
                 with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
                 # Compute quantities in loop dynamically as with open(..) reads off the prior values
                     for line in file:
                         columns = line.split()
                         prior_point_vector = [] 
+
                         for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
                             if self.prior_column_types_are_set == True: 
                                 prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
                             if self.prior_column_types_are_set == False: 
                                 prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                        
                         E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
-
                         # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                        running_total+=1 # Also add to the running total                         
-                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
-        for i in range(0,len(self.model_name_list)):
-            if ML_point*np.exp(-ML_threshold) < E[i]: model_valid_ML[i] = 1.0 
-            # Decide on whether the maximum marginal likelihood point in the prior space is large enough to satisfy ML averageing for each model 
+                        if forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) > model_ML: 
+                            model_ML = forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)
+                        # If one of the prior points has a larger maximum likelihood then replace the density-estimated version
+
+                        running_total+=1 # Also add to the running total                         
+                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points 
+
+            if samples_ok == False: 
+                E[i] = model_ML 
+            # If the samples do not provide a decent estimate of the prior density because the (error_vector scale is too small)
+            # then replace the current evidence estimate for the given model with the maximum likelihood value computed 
+            # using the Kernel Density estimation method
+
+            if ML_point*np.exp(-0.5*(ML_threshold**2)) < model_ML: model_valid_ML[i] = 1.0 
+            # Decide on whether the Maximum Likelihood point in the prior space is large enough to satisfy ML averageing for each 
+            # model, having specified a threshold of acceptance in effective 'n-sigma' 
 
         if mix_models == True: 
             avoid_repeat = 0
@@ -334,7 +328,7 @@ class foxi:
 
         return [abslnB,decisivity,DKL,np.log(E),valid_ML] 
         # Output utilities, raw log evidences and binary indicator variables in 'valid_ML' to either validate (1.0) or invalidate (0.0) the fiducial 
-        # point in the case of each model pair - this is used in the Marginal Likelihood average procedure in rerun_foxi
+        # point in the case of each model pair - this is used in the Maximum Likelihood average procedure in rerun_foxi
 
    
     def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
@@ -408,48 +402,43 @@ class foxi:
         # Initialise an empty list of density functions that may or may not be used
 
         for i in range(0,len(self.model_name_list)):  
-
-            if self.prior_density_method == 'kde':
-            # If set to using Kernel Density Estimation then the statsmodels.nonparametric toolkit is used to estimate the 
-            # density locally at the fiducial point itself 
-                
-                running_total = 0 # Initialize a running total of points read in from each prior      
+         
+            running_total = 0 # Initialize a running total of points read in from each prior      
  
-                prior_data = [] # Initialize empty list for the new prior data
+            prior_data = [] # Initialize empty list for the new prior data
 
-                with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-                # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                    for line in file:
-                        columns = line.split()
-                        prior_point_vector = [] 
-                        for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                            if self.prior_column_types_are_set == True: 
-                                prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
-                            if self.prior_column_types_are_set == False: 
-                                prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
-                        
-                        prior_data.append(np.asarray(prior_point_vector)) # Store the data for the KDE
-                                          
-                        # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                        running_total+=1 # Also add to the running total                         
-                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
-                
-                c_string = ''
-                for j in range(0,len(self.model_name_list)): c_string += 'c'
-                # Silly notational detail to get the kde to work for continuous variables in all dimensions    
+            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
+            # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                for line in file:
+                    columns = line.split()
+                    prior_point_vector = [] 
+                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                        if self.prior_column_types_are_set == True: 
+                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
+                        if self.prior_column_types_are_set == False: 
+                            prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    
+                    prior_data.append(np.asarray(prior_point_vector)) # Store the data for the KDE
+                                      
+                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                    running_total+=1 # Also add to the running total                         
+                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+            
+            c_string = ''
+            for j in range(0,len(self.model_name_list)): c_string += 'c'
+            # Silly notational detail to get the kde to work for continuous variables in all dimensions    
 
-                self.density_functions.append(kde(prior_data,var_type=c_string)) # Append a new Density Estimation function to the list for use later
+            self.density_functions.append(kde(prior_data,var_type=c_string)) # Append a new Density Estimation function to the list for use later
+            # Kernel Density Estimation uses statsmodels.nonparametric toolkit to estimate the 
+            # density locally at the fiducial point itself, ensuring that there are no lost points
+            # within each prior volume 'hull'
 
-            if self.prior_density_method == 'raw':
-            # If set to using raw samples then set the density function to 0.0 to keep reference numbers correct
-                self.density_functions.append(0.0)
-
-        if self.prior_density_method == 'kde':
-        # If using KDE method, quote the bandwidths used for each dimension for smoothing
-            print('Using the statsmodels module: http://statsmodels.sourceforge.net/')
-            print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
-            for i in range(0,len(self.model_name_list)):
-                 print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
+        
+        # When using KDE method we quote the bandwidths used for each dimension for smoothing
+        print('Using the statsmodels module: http://statsmodels.sourceforge.net/')
+        print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
+        for i in range(0,len(self.model_name_list)):
+             print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
 
         running_total = 0 # Re-initialize a running total of points read in from the chains
 
@@ -475,7 +464,7 @@ class foxi:
                     plot_data_file.write(str(value) + "\t") # Output raw log evidence values
                 plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                 for value in valid_ML:
-                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of Marginal Likelihood average
+                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of Maximum Likelihood average
                 plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
                 plot_data_file.write(str(DKL) + "\n")
                 # Write data to file if requested                    
@@ -488,7 +477,7 @@ class foxi:
 
     def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
-    # and also the utilities using Marginal-Likelihood averageing are computed. This two-step sequence is intended to simplify computing
+    # and also the utilities using Maximum Likelihood averageing are computed. This two-step sequence is intended to simplify computing
     # on a cluster
         ''' 
         Quick usage and settings:
@@ -546,21 +535,21 @@ class foxi:
         expected_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the expected absolute log Bayes factor for the number of models (reference model is element 0)
         expected_abslnB_ML = np.zeros(number_of_models)
-        # Initialize an the expected Marginal-Likelihood-averaged version of abslnB
+        # Initialize an the expected Maximum-Likelihood-averaged version of abslnB
         decisivity_ML = np.zeros(number_of_models)
-        # Initialize an the expected Marginal-Likelihood-averaged version of the decisivity
+        # Initialize an the expected Maximum-Likelihood-averaged version of the decisivity
         som_abslnB = np.zeros(number_of_models)
         # Initialize an array of values of the second-moment of the absolute log Bayes factor for the number of models (reference model is element 0)
         som_abslnB_ML = np.zeros(number_of_models)
-        # Initialize som_abslnB for the Marginal Likelihood average scheme
+        # Initialize som_abslnB for the Maximum Likelihood average scheme
         proportion_of_ML_failures = np.zeros(number_of_models)
-        # Initialize the volume ratio of the fiducial point space associated to immediate disfavouring of both models due to the Bayesian evidence of both models being too low when compared with the maximum Marginal Likelihood model
+        # Initialize the volume ratio of the fiducial point space associated to immediate disfavouring of both models due to the Bayesian evidence of both models being too low when compared with the Maximum Likelihood
         expected_DKL = 0.0
         # Initialize the count for expected Kullback-Leibler divergence   
         som_DKL = 0.0
         # Initialize the second-moment of the Kullback-Leibler divergence  
         total_valid_ML = np.zeros(number_of_models)
-        # Initialize the additional normalisation factor for the Marginal-Likelihood average  
+        # Initialize the additional normalisation factor for the Maximum Likelihood average  
 
         running_total = 0 # Initialize a running total of points read in from the foxiplot data file
 
@@ -585,7 +574,7 @@ class foxi:
                         valid_ML.append(float(columns[j]))
                         if float(columns[j]) == 0.0: invalid_ML.append(1.0)
                         if float(columns[j]) == 1.0: invalid_ML.append(0.0)
-                # Read in fiducial points, Marginal-Likelihood points, invalid Marginal-Likelihood points and utilities from foxiplot data file                          
+                # Read in fiducial points, Maximum Likelihood points, invalid Maximum Likelihood points and utilities from foxiplot data file                          
 
                 predictive_prior_weight = 1.0 # Initialize the prior weight unit value
                 for i in range(0,len(fiducial_point_vector)):
@@ -613,7 +602,7 @@ class foxi:
                 expected_DKL += (DKL*predictive_prior_weight)
 
                 proportion_of_ML_failures = proportion_of_ML_failures + (invalid_ML*predictive_prior_weight) 
-                # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both because their Bayesian evidences are too low when compared with the maximum Marginal Likelihood model
+                # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both because their Bayesian evidences are too low when compared with the Maximum Likelihood
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 

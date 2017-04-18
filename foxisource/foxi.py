@@ -7,6 +7,7 @@ rc('text',usetex=True)
 import pylab as pl
 import matplotlib.cm as cm
 import corner
+from statsmodels.nonparametric.kernel_density import KDEMultivariate as kde
 
 class foxi:
 # Initialize the 'foxi' method class
@@ -41,7 +42,9 @@ class foxi:
         self.add_axes_labels
         self.axes_labels = []
         self.fontsize = 15
-
+        self.set_prior_density_method
+        self.prior_density_method = 'raw'
+        
 
     def set_chains(self,name_of_chains): 
     # Set the file name of the chains of the current data set
@@ -52,6 +55,20 @@ class foxi:
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
         # Input the .txt or .dat file names in the foxipriors/ directory
+
+    
+    def set_prior_density_method(self,method):
+        '''
+        Change the density estimation method for each prior in the list to one of two options:
+        
+        'raw'     -  Make use of the raw samples directly. This can be safely used when the typical
+                     prior sample distances are smaller than the 1-sigma contour distance of the error_vector
+        
+        'kde'     -  Use a local density estimation for the prior and compute the evidence at the fiducial
+                     point in each case. This makes the result independent of error_vector
+        
+        '''
+        self.prior_density_method = method        
 
 
     def set_column_types(self,column_types):
@@ -193,10 +210,15 @@ class foxi:
                     if self.column_types_are_set == False: 
                         fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
                 forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
-                
-                if ML_point < forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector): ML_point = forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector) 
-                # Search for and save the maximum Marginal Likelihood model point
-                
+                # Compute the normalisation for the dkl value later on...                
+
+                if self.prior_density_method == 'raw':
+                # Search for and save the maximum Marginal Likelihood model point if using the 'raw' method
+                    if ML_point < forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector): ML_point = forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector) 
+                if self.prior_density_method == 'kde':
+                # If using the 'kde' method then the maximum Marginal Likelihood model point is trivial to find
+                    ML_point = forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
+
                 running_total+=1 # Also add to the running total                         
                 if running_total >= number_of_points: break # Finish once reached specified number points
 
@@ -204,25 +226,32 @@ class foxi:
             
             running_total = 0 # Initialize a running total of points read in from each prior
 
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                for line in file:
-                    columns = line.split()
-                    prior_point_vector = [] 
-                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                        if self.prior_column_types_are_set == True: 
-                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
-                        if self.prior_column_types_are_set == False: 
-                            prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
-                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
+            if self.prior_density_method == 'kde':
+            # If set to using Kernel Density Estimation then the statsmodels.nonparametric toolkit is used to estimate the 
+            # density locally at the fiducial point itself 
+                E[i] = self.density_functions[i].pdf(fiducial_point_vector)*forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
 
-                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                    running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+            if self.prior_density_method == 'raw':
+            # If set to using raw samples then a straightforward computation proceeds
+                with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
+                # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                    for line in file:
+                        columns = line.split()
+                        prior_point_vector = [] 
+                        for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                            if self.prior_column_types_are_set == True: 
+                                prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
+                            if self.prior_column_types_are_set == False: 
+                                prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                        E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
+
+                        # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                        running_total+=1 # Also add to the running total                         
+                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
 
         for i in range(0,len(self.model_name_list)):
             if ML_point*np.exp(-ML_threshold) < E[i]: model_valid_ML[i] = 1.0 
-                    # Decide on whether the maximum marginal likelihood point in the prior space is large enough to satisfy ML averageing for each model 
+            # Decide on whether the maximum marginal likelihood point in the prior space is large enough to satisfy ML averageing for each model 
 
         if mix_models == True: 
             avoid_repeat = 0
@@ -374,6 +403,55 @@ class foxi:
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
             # Initialize output files in thec case where all possible model combinations are tried within each utility
+
+        self.density_functions = []
+        # Initialise an empty list of density functions that may or may not be used
+
+        for i in range(0,len(self.model_name_list)):  
+
+            if self.prior_density_method == 'kde':
+            # If set to using Kernel Density Estimation then the statsmodels.nonparametric toolkit is used to estimate the 
+            # density locally at the fiducial point itself 
+                
+                running_total = 0 # Initialize a running total of points read in from each prior      
+ 
+                prior_data = [] # Initialize empty list for the new prior data
+
+                with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
+                # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                    for line in file:
+                        columns = line.split()
+                        prior_point_vector = [] 
+                        for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                            if self.prior_column_types_are_set == True: 
+                                prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
+                            if self.prior_column_types_are_set == False: 
+                                prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                        
+                        prior_data.append(np.asarray(prior_point_vector)) # Store the data for the KDE
+                                          
+                        # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                        running_total+=1 # Also add to the running total                         
+                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+                
+                c_string = ''
+                for j in range(0,len(self.model_name_list)): c_string += 'c'
+                # Silly notational detail to get the kde to work for continuous variables in all dimensions    
+
+                self.density_functions.append(kde(prior_data,var_type=c_string)) # Append a new Density Estimation function to the list for use later
+
+            if self.prior_density_method == 'raw':
+            # If set to using raw samples then set the density function to 0.0 to keep reference numbers correct
+                self.density_functions.append(0.0)
+
+        if self.prior_density_method == 'kde':
+        # If using KDE method, quote the bandwidths used for each dimension for smoothing
+            print('Using the statsmodels module: http://statsmodels.sourceforge.net/')
+            print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
+            for i in range(0,len(self.model_name_list)):
+                 print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
+
+        running_total = 0 # Re-initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
@@ -721,6 +799,7 @@ class foxi:
                 # Saving output to foxiplots/
 
         if corner_plot == True:
+            print('Using the corner module: https://pypi.python.org/pypi/corner/')
             figure = corner.corner(points,bins=number_of_bins,color='m',range=ranges,labels=self.axes_labels, label_kwargs={"fontsize": self.fontsize}, plot_contours=False,truths=label_values)
         # Use corner to plot the samples 
 

@@ -42,6 +42,7 @@ class foxi:
         self.add_axes_labels
         self.axes_labels = []
         self.fontsize = 15
+        self.decide_on_best_computation
         
 
     def set_chains(self,name_of_chains): 
@@ -111,6 +112,41 @@ class foxi:
             print("Reading in " + str(dim_data) + " fiducial point dimensions and " + str(num_models) + " models...") 
             return [dim_data,num_models]
             # Fail-safe output to make sure the user knows rerun_foxi can read this
+
+
+    def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,model_index):
+    # Decide on and output the best computation available for both the Maximum Likelihood and Evidence for a given model     
+        if ML_point*np.exp(-ML_threshold) < kde_model_ML:
+            if ML_point*np.exp(-ML_threshold) < samples_model_ML:
+            # If kde_model_ML and samples_model_ML are both over the threshold we should compare the kernel bandwidth to the 
+            # fiducial likelihood error vector in each dimension to decide if the prior samples can give a decent estimate. 
+            # Otherwise we simply use the kde method to estimate the evidence and Maximum Likelihood
+                use_sampling = True
+                for k in range(0,len(chains_column_numbers)):
+                    if np.sqrt(self.density_functions[model_index].bw[k]) > error_vector[k]:
+                        use_sampling = False
+                if use_sampling == False:
+                    model_ML = kde_model_ML
+                    model_evidence = kde_model_ML
+                if use_sampling == True:
+                    model_ML = samples_model_ML
+                    model_evidence = samples_model_evidence  
+            else:
+            # It must be true that kde_model_ML > samples_model_ML therefore we use the KDE method to avoid undersampling problems
+                model_ML = kde_model_ML
+                model_evidence = kde_model_ML
+        else:
+            if ML_point*np.exp(-ML_threshold) < samples_model_ML:
+            # It must be true that samples_model_ML > kde_model_ML therefore we use the sampling method to avoid issues with approximating
+            # the fiducial liklelihood as a single point in parameter space
+                model_ML = samples_model_ML
+                model_evidence = samples_model_evidence
+            else:
+            # Everything is ruled out so just go with the sampled versions of each quantity  
+                model_ML = samples_model_ML
+                model_evidence = samples_model_evidence
+
+        return [model_ML,model_evidence]    
 
 
     def utility_functions(self,fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=False,ML_threshold=5.0):
@@ -203,47 +239,39 @@ class foxi:
             
             running_total = 0 # Initialize a running total of points read in from each prior
  
-            model_ML = self.density_functions[i].pdf(fiducial_point_vector)*forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
+            kde_model_ML = self.density_functions[i].pdf(fiducial_point_vector)*forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector)
             # Kernel Density Estimation using the statsmodels.nonparametric toolkit to estimate the 
             # density locally at the fiducial point itself. This can protect against finite sampling scale effects
+
+            samples_model_ML = 0.0
+            # Initialise the maximum likelihood to be obtained from the model samples
                
-            samples_ok = True 
-            for k in range(0,len(error_vector)):
-                if np.sqrt(self.density_functions[i].bw[k]) > error_vector[k]:
-                    samples_ok = False
-            # Use the KDE bandwidths to work out whether using the prior samples directly 
-            # is an appropriate way to estimate the evidence or not            
+            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
+            # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                for line in file:
+                    columns = line.split()
+                    prior_point_vector = [] 
 
-            if samples_ok == True:
-                with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-                # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                    for line in file:
-                        columns = line.split()
-                        prior_point_vector = [] 
-
-                        for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                            if self.prior_column_types_are_set == True: 
-                                prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
-                            if self.prior_column_types_are_set == False: 
-                                prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
+                        if self.prior_column_types_are_set == True: 
+                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
+                        if self.prior_column_types_are_set == False: 
+                            prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
                         
-                        E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
-                        # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
+                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
 
-                        if forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) > model_ML: 
-                            model_ML = forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)
-                        # If one of the prior points has a larger maximum likelihood then replace the density-estimated version
+                    if forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) > samples_model_ML: 
+                        samples_model_ML = forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)
+                    # If one of the prior points has a larger maximum likelihood then replace the previous best
 
-                        running_total+=1 # Also add to the running total                         
-                        if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points 
+                    running_total+=1 # Also add to the running total                         
+                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points 
 
-            if samples_ok == False: 
-                E[i] = model_ML 
-            # If the samples do not provide a decent estimate of the prior density because the (error_vector scale is too small)
-            # then replace the current evidence estimate for the given model with the maximum likelihood value computed 
-            # using the Kernel Density estimation method
+            [model_ML,E[i]] = self.decide_on_best_computation(ML_point,samples_model_ML,kde_model_ML,E[i],error_vector,ML_threshold,i)
+            # Use a specified procedure to decide on which of the methods is best to use for computation
 
-            if ML_point*np.exp(-0.5*(ML_threshold**2)) < model_ML: model_valid_ML[i] = 1.0 
+            if ML_point*np.exp(-ML_threshold) < model_ML: model_valid_ML[i] = 1.0 
             # Decide on whether the Maximum Likelihood point in the prior space is large enough to satisfy ML averageing for each 
             # model, having specified a threshold of acceptance in effective 'n-sigma' 
 

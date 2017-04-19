@@ -127,7 +127,7 @@ class foxi:
             # fiducial likelihood error vector in each dimension to decide if the prior samples can give a decent estimate. 
             # Otherwise we simply use the kde method to estimate the evidence and Maximum Likelihood
                 use_sampling = True
-                for k in range(0,len(chains_column_numbers)):
+                for k in range(0,len(error_vector)):
                     if np.sqrt(self.density_functions[model_index].bw[k]) > error_vector[k]:
                         use_sampling = False
                 if use_sampling == False:

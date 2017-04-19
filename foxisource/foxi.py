@@ -54,6 +54,11 @@ class foxi:
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
         # Input the .txt or .dat file names in the foxipriors/ directory
+        self.number_of_category_A_points = [0 for i in model_name_list]
+        self.number_of_category_B_points = [0 for i in model_name_list]
+        self.number_of_category_C_points = [0 for i in model_name_list]
+        self.number_of_category_D_points = [0 for i in model_name_list]
+        # Initialise a count for each model in their category of points (see arxiv:XXXXXX)
 
 
     def set_column_types(self,column_types):
@@ -130,21 +135,29 @@ class foxi:
                     model_evidence = kde_model_ML
                 if use_sampling == True:
                     model_ML = samples_model_ML
-                    model_evidence = samples_model_evidence  
+                    model_evidence = samples_model_evidence 
+                self.number_of_category_B_points[model_index] += 1
+                # Update the number of category B points for this model 
             else:
             # It must be true that kde_model_ML > samples_model_ML therefore we use the KDE method to avoid undersampling problems
                 model_ML = kde_model_ML
                 model_evidence = kde_model_ML
+                self.number_of_category_D_points[model_index] += 1
+                # Update the number of category D points for this model
         else:
             if ML_point*np.exp(-ML_threshold) < samples_model_ML:
             # It must be true that samples_model_ML > kde_model_ML therefore we use the sampling method to avoid issues with approximating
             # the fiducial liklelihood as a single point in parameter space
                 model_ML = samples_model_ML
                 model_evidence = samples_model_evidence
+                self.number_of_category_A_points[model_index] += 1
+                # Update the number of category A points for this model
             else:
             # Everything is ruled out so just go with the sampled versions of each quantity  
                 model_ML = samples_model_ML
                 model_evidence = samples_model_evidence
+                self.number_of_category_C_points[model_index] += 1
+                # Update the number of category C points for this model
 
         return [model_ML,model_evidence]    
 
@@ -424,7 +437,7 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the possible number of distinct model pairs 
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
-            # Initialize output files in thec case where all possible model combinations are tried within each utility
+            # Initialize output files in the case where all possible model combinations are tried within each utility
 
         self.density_functions = []
         # Initialise an empty list of density functions that may or may not be used
@@ -453,7 +466,7 @@ class foxi:
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
             
             c_string = ''
-            for j in range(0,len(self.model_name_list)): c_string += 'c'
+            for j in range(0,len(prior_column_numbers[i])): c_string += 'c'
             # Silly notational detail to get the kde to work for continuous variables in all dimensions    
 
             self.density_functions.append(kde(prior_data,var_type=c_string)) # Append a new Density Estimation function to the list for use later
@@ -500,7 +513,17 @@ class foxi:
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
        
-        plot_data_file.close()    
+        plot_data_file.close() 
+
+        points_category_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_number_points_categories.txt",'w')
+        # Initialize output file containing the counts of each category of point (defined in arxiv:XXXXXX)   
+
+        points_category_file.write('Number of points in each category (defined in arxiv:XXXXXX) for each model:' + '\n')
+        for i in range(0,len(self.model_name_list)):
+            points_category_file.write('Model ' + str(i) + ": " + "n_A = " + str(self.number_of_category_A_points[i]) + " " + "n_B = " + str(self.number_of_category_B_points[i]) + " " + "n_C = " + str(self.number_of_category_C_points[i]) + " " + "n_D = " + str(self.number_of_category_D_points[i]) + '\n')
+            # Write output
+
+        points_category_file.close()
 
 
     def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False): 

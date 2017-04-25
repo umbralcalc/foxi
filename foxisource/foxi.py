@@ -119,7 +119,7 @@ class foxi:
             # Fail-safe output to make sure the user knows rerun_foxi can read this
 
 
-    def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,model_index):
+    def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,model_index):
     # Decide on and output the best computation available for both the Maximum Likelihood and Evidence for a given model     
         if ML_point*np.exp(-ML_threshold) < kde_model_ML:
             if ML_point*np.exp(-ML_threshold) < samples_model_ML:
@@ -133,6 +133,19 @@ class foxi:
                 if use_sampling == False:
                     model_ML = kde_model_ML
                     model_evidence = kde_model_ML
+                    for k in range(0,len(fiducial_point_vector)):
+                    # Loop over each fiducial point dimension in the evidence estimate
+
+                         one_sigma_vector = np.zeros(len(fiducial_point_vector))
+                         one_sigma_vector[k] = error_vector[k]
+                         # Construct a jump vector of order 1-sigma in each dimension                      
+ 
+                         model_evidence += self.density_functions[model_index].pdf(fiducial_point_vector+one_sigma_vector)*forecast_data_function(fiducial_point_vector+one_sigma_vector,fiducial_point_vector,error_vector)
+                         model_evidence += self.density_functions[model_index].pdf(fiducial_point_vector-one_sigma_vector)*forecast_data_function(fiducial_point_vector-one_sigma_vector,fiducial_point_vector,error_vector)
+                         # Make the jumps and compute the contributions to the total evidence of the model for each corresponding point
+
+                    model_evidence /= 1.0 + (2.0*float(len(fiducial_point_vector)+1))
+                    # In order to estimate the evidence with only a few points of the fiducial point distribution (future data) compute each pair of 1-sigma intervals for each dimension then sum up over them, dividing by the total number of points used in the estimate
                 if use_sampling == True:
                     model_ML = samples_model_ML
                     model_evidence = samples_model_evidence 
@@ -281,7 +294,7 @@ class foxi:
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points 
 
-            [model_ML,E[i]] = self.decide_on_best_computation(ML_point,samples_model_ML,kde_model_ML,E[i],error_vector,ML_threshold,i)
+            [model_ML,E[i]] = self.decide_on_best_computation(ML_point,samples_model_ML,kde_model_ML,E[i],error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,i)
             # Use a specified procedure to decide on which of the methods is best to use for computation
 
             if ML_point*np.exp(-ML_threshold) < model_ML: model_valid_ML[i] = 1.0 

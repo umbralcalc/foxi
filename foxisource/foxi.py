@@ -22,7 +22,7 @@ class foxi:
         self.utility_functions
         self.run_foxi
         self.rerun_foxi
-        self.analyse_foxiplot_lines
+        self.analyse_foxiplot_line
         self.plot_foxiplots
         self.chains_directory = 'foxichains/' 
         self.priors_directory = 'foxipriors/'
@@ -91,32 +91,18 @@ class foxi:
         self.fontsize = fontsize
 
 
-    def analyse_foxiplot_lines(self,line_1,line_2,line_3):
-    # Reads 3 lines from a foxiplot data file and outputs the number of models and dimension of data (this is just to check the input)
-        dim_data = 0
-        num_models = 0
-        dim_data_found = False
-        num_models_found = False
-        # Set up values and initialise Booleans
+    def analyse_foxiplot_line(self,line_1):
+    # Reads first line from a foxiplot data file and outputs the number of models and dimension of data (this is just to check the input)
+        dim_data = int(line_1[0])
+        num_models = int(line_1[1])
+        self.mix_models_was_used = int(line_1[2])
+        
+        if self.mix_models_was_used == False: 
+            print("Just read in an ordinary foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
+        if self.mix_models_was_used == True:
+            print("Just read in a `mix_models' foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
 
-        for value in range(0,len(line_1)):
-            if dim_data_found == True: 
-                if num_models_found == False:
-                    num_models = value - dim_data - 1   
-                    if line_1[value] == 0.0 and line_2[value] == 1.0 and line_3[value] == 2.0:    
-                        num_models_found = True
-            if dim_data_found == False:
-                dim_data = value 
-                if line_1[value] == 0.0 and line_2[value] == 1.0 and line_3[value] == 2.0:          
-                    dim_data_found = True
- 
-        if dim_data_found == False or num_models_found == False:
-            print("rerun_foxi cannot read this file!!!") 
-            return [0,0]
-        if dim_data_found == True and num_models_found == True:
-            print("Reading in " + str(dim_data) + " fiducial point dimensions and " + str(num_models) + " models...") 
-            return [dim_data,num_models]
-            # Fail-safe output to make sure the user knows rerun_foxi can read this
+        return [dim_data,num_models]
 
 
     def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,model_index):
@@ -439,7 +425,8 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
-            # Initialize output files 
+            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(len(self.model_name_list)) + "\t" + str(0) + "\n")
+            # Initialize output file
 
         if mix_models == True:
             possible_model_pairs = len(self.model_name_list) + ((len(self.model_name_list))*(len(self.model_name_list)-1)/2)
@@ -450,7 +437,8 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the possible number of distinct model pairs 
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
-            # Initialize output files in the case where all possible model combinations are tried within each utility
+            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(possible_model_pairs) + "\t" + str(1) + "\n")
+            # Initialize output file in the case where all possible model combinations are tried within each utility
 
         self.density_functions = []
         # Initialise an empty list of density functions that may or may not be used
@@ -539,7 +527,7 @@ class foxi:
         points_category_file.close()
 
 
-    def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False): 
+    def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False,model_name_TeX_input=[]): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
     # and also the utilities using Maximum Likelihood averageing are computed. This two-step sequence is intended to simplify computing
     # on a cluster
@@ -560,6 +548,10 @@ class foxi:
     
         TeX_output                     =  Boolean - True outputs the utilities in TeX table format
 
+        
+        model_name_TeX_input           =  An empty list which may be populated with model names written in TeX for the table
+ 
+
 
         '''
 
@@ -569,9 +561,7 @@ class foxi:
         running_total = 0 # Initialize a running total of points read in from the foxiplot data file
         
         line_for_analysis_1 = []
-        line_for_analysis_2 = []
-        line_for_analysis_3 = []
-        # Initialise lines to be used to analyse the foxiplot data file for correct reading
+        # Initialise line to be used to analyse the foxiplot data file for correct reading
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
@@ -579,15 +569,11 @@ class foxi:
                 columns = line.split()
                 if running_total == 0:
                     line_for_analysis_1 = [float(value) for value in columns]
-                if running_total == 1:
-                    line_for_analysis_2 = [float(value) for value in columns]
-                if running_total == 2:
-                    line_for_analysis_3 = [float(value) for value in columns]
                 running_total+=1 # Also add to the running total
-                if running_total == 3: break # Finish once reached specified number of data points 
+                if running_total == 1: break # Finish once reached specified number of data points 
         # Read off lines to be used to analyse the foxiplot data file for correct reading
         
-        [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_lines(line_for_analysis_1,line_for_analysis_2,line_for_analysis_3)
+        [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_line(line_for_analysis_1)
         # Read in lines, analyse and output useful information for reading the data file or return error
 
         predictive_prior_weight_total = 0.0
@@ -615,58 +601,60 @@ class foxi:
         total_valid_ML = np.zeros(number_of_models)
         # Initialize the additional normalisation factor for the Maximum Likelihood average  
 
-        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
+        running_total = -1 # Initialize a running total of points read in from the foxiplot data file
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
             for line in file:
-                columns = line.split()
-                fiducial_point_vector = [] 
-                valid_ML = []
-                invalid_ML =[]
-                DKL = float(columns[len(columns)-1])
-                for j in range(0,len(columns)):
-                    if j < number_of_fiducial_point_dimensions: 
-                        fiducial_point_vector.append(float(columns[j]))
-                    if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
-                        if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
-                            abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
-                        else:
-                            abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
-                        # Overall if else to avoid NANs and infinite values
-                    if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
-                        valid_ML.append(float(columns[j]))
-                        if float(columns[j]) == 0.0: invalid_ML.append(1.0)
-                        if float(columns[j]) == 1.0: invalid_ML.append(0.0)
-                # Read in fiducial points, Maximum Likelihood points, invalid Maximum Likelihood points and utilities from foxiplot data file                          
+                if running_total != -1:
+                # Avoid reading the first line
+                    columns = line.split()
+                    fiducial_point_vector = [] 
+                    valid_ML = []
+                    invalid_ML =[]
+                    DKL = float(columns[len(columns)-1])
+                    for j in range(0,len(columns)):
+                        if j < number_of_fiducial_point_dimensions: 
+                            fiducial_point_vector.append(float(columns[j]))
+                        if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
+                            if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
+                                abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                            else:
+                                abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
+                            # Overall if else to avoid NANs and infinite values
+                        if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
+                            valid_ML.append(float(columns[j]))
+                            if float(columns[j]) == 0.0: invalid_ML.append(1.0)
+                            if float(columns[j]) == 1.0: invalid_ML.append(0.0)
+                    # Read in fiducial points, Maximum Likelihood points, invalid Maximum Likelihood points and utilities from foxiplot data file                          
 
-                predictive_prior_weight = 1.0 # Initialize the prior weight unit value
-                for i in range(0,len(fiducial_point_vector)):
-                    if predictive_prior_types[i] == 'flat':
-                        predictive_prior_weight *= 1.0
-                    if predictive_prior_types[i] == 'log':
-                        predictive_prior_weight *= 1.0/fiducial_point_vector[i]           
-                predictive_prior_weight_total += predictive_prior_weight
-                # Compute and store the predictive prior weights                 
+                    predictive_prior_weight = 1.0 # Initialize the prior weight unit value
+                    for i in range(0,len(fiducial_point_vector)):
+                        if predictive_prior_types[i] == 'flat':
+                            predictive_prior_weight *= 1.0
+                        if predictive_prior_types[i] == 'log':
+                            predictive_prior_weight *= 1.0/fiducial_point_vector[i]           
+                    predictive_prior_weight_total += predictive_prior_weight
+                    # Compute and store the predictive prior weights                 
 
-                deci = np.zeros(number_of_models)
-                # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
-                for i in range(0,number_of_models):
-                    if abslnB[i] >= 5.0: deci[i] = 1.0
-                # Quickly compute the decisivity contribution using the absolute log Bayes factor for each model 
+                    deci = np.zeros(number_of_models)
+                    # Initialize an array of values of the decisivity utility function for the number of models (reference model is element 0)
+                    for i in range(0,number_of_models):
+                        if abslnB[i] >= 5.0: deci[i] = 1.0
+                    # Quickly compute the decisivity contribution using the absolute log Bayes factor for each model 
 
-                valid_ML = np.asarray(valid_ML)
-                invalid_ML = np.asarray(invalid_ML)
-                total_valid_ML += valid_ML*predictive_prior_weight
+                    valid_ML = np.asarray(valid_ML)
+                    invalid_ML = np.asarray(invalid_ML)
+                    total_valid_ML += valid_ML*predictive_prior_weight
  
-                decisivity = decisivity + (deci*predictive_prior_weight) 
-                expected_abslnB = expected_abslnB + (abslnB*predictive_prior_weight) 
-                decisivity_ML = decisivity_ML + (valid_ML*predictive_prior_weight*deci) 
-                expected_abslnB_ML = expected_abslnB_ML + (valid_ML*predictive_prior_weight*abslnB) # Do quick vector additions to update the expected utilities
-                expected_DKL += (DKL*predictive_prior_weight)
+                    decisivity = decisivity + (deci*predictive_prior_weight) 
+                    expected_abslnB = expected_abslnB + (abslnB*predictive_prior_weight) 
+                    decisivity_ML = decisivity_ML + (valid_ML*predictive_prior_weight*deci) 
+                    expected_abslnB_ML = expected_abslnB_ML + (valid_ML*predictive_prior_weight*abslnB) # Do quick vector additions to update the expected utilities
+                    expected_DKL += (DKL*predictive_prior_weight)
 
-                proportion_of_ML_failures = proportion_of_ML_failures + (invalid_ML*predictive_prior_weight) 
-                # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both because their Bayesian evidences are too low when compared with the Maximum Likelihood
+                    proportion_of_ML_failures = proportion_of_ML_failures + (invalid_ML*predictive_prior_weight) 
+                    # Compute the volume ratio of the fiducial point space associated to immediate disfavouring of both because their Bayesian evidences are too low when compared with the Maximum Likelihood
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
@@ -680,43 +668,45 @@ class foxi:
         proportion_of_ML_failures /= predictive_prior_weight_total
         # Performing relevant normalisations
 
-        running_total = 0 # Initialize a running total of points read in from the foxiplot data file
+        running_total = -1 # Initialize a running total of points read in from the foxiplot data file
 
         with open(self.path_to_foxi_directory + '/' + self.output_directory + foxiplot_samples) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the foxiplot data file
             for line in file:
-                columns = line.split()
-                fiducial_point_vector = [] 
-                valid_ML = []
-                DKL = float(columns[len(columns)-1])
-                for j in range(0,len(columns)):
-                    if j < number_of_fiducial_point_dimensions: 
-                        fiducial_point_vector.append(float(columns[j]))
-                    if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
-                        if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
-                            abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
-                        else:
-                            abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
-                        # Overall if else to avoid NANs and infinite values
-                    if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
-                        valid_ML.append(float(columns[j]))
-                # Read in fiducial points and utilities from foxiplot data file                      
+                if running_total != -1:
+                # Avoid reading the first line
+                    columns = line.split()
+                    fiducial_point_vector = [] 
+                    valid_ML = []
+                    DKL = float(columns[len(columns)-1])
+                    for j in range(0,len(columns)):
+                        if j < number_of_fiducial_point_dimensions: 
+                            fiducial_point_vector.append(float(columns[j]))
+                        if j > number_of_fiducial_point_dimensions and j < number_of_fiducial_point_dimensions + number_of_models: 
+                            if np.isnan(float(columns[j])) == False and np.isfinite(float(columns[j])) == True: 
+                                abslnB[j - number_of_fiducial_point_dimensions - 1] = float(columns[j])
+                            else:
+                                abslnB[j - number_of_fiducial_point_dimensions - 1] = 1000.0 # Maximal permitted value for an individual sample
+                            # Overall if else to avoid NANs and infinite values
+                        if j > number_of_fiducial_point_dimensions + (2*number_of_models) + 2 and j < number_of_fiducial_point_dimensions + (3*number_of_models) + 3:  
+                            valid_ML.append(float(columns[j]))
+                    # Read in fiducial points and utilities from foxiplot data file                      
 
-                predictive_prior_weight = 1.0 # Initialize the prior weight unit value
-                for i in range(0,len(fiducial_point_vector)):
-                    if predictive_prior_types[i] == 'flat':
-                        predictive_prior_weight *= 1.0
-                    if predictive_prior_types[i] == 'log':
-                        predictive_prior_weight *= 1.0/fiducial_point_vector[i]
+                    predictive_prior_weight = 1.0 # Initialize the prior weight unit value
+                    for i in range(0,len(fiducial_point_vector)):
+                        if predictive_prior_types[i] == 'flat':
+                            predictive_prior_weight *= 1.0
+                        if predictive_prior_types[i] == 'log':
+                            predictive_prior_weight *= 1.0/fiducial_point_vector[i]
 
-                predictive_prior_weights = [predictive_prior_weight for k in range(0,number_of_models)]
-                predictive_prior_weights = np.asarray(predictive_prior_weights)
-                # Create an array (one value per model) of prior weights for each sample
+                    predictive_prior_weights = [predictive_prior_weight for k in range(0,number_of_models)]
+                    predictive_prior_weights = np.asarray(predictive_prior_weights)
+                    # Create an array (one value per model) of prior weights for each sample
 
-                valid_ML = np.asarray(valid_ML)
-                som_abslnB += (((abslnB-expected_abslnB)**2)*predictive_prior_weights/predictive_prior_weight_total) 
-                som_abslnB_ML += (((abslnB-expected_abslnB_ML)**2)*predictive_prior_weights*(valid_ML/total_valid_ML)) # Do quick vector additions to update second-moment utilities
-                som_DKL += (((DKL-expected_DKL)**2)*predictive_prior_weight/predictive_prior_weight_total)
+                    valid_ML = np.asarray(valid_ML)
+                    som_abslnB += (((abslnB-expected_abslnB)**2)*predictive_prior_weights/predictive_prior_weight_total) 
+                    som_abslnB_ML += (((abslnB-expected_abslnB_ML)**2)*predictive_prior_weights*(valid_ML/total_valid_ML)) # Do quick vector additions to update second-moment utilities
+                    som_DKL += (((DKL-expected_DKL)**2)*predictive_prior_weight/predictive_prior_weight_total)
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
@@ -737,15 +727,107 @@ class foxi:
         # Output data to `foxiplots_data_summary.txt'
 
         if TeX_output == True:
+        # Output a TeX table!
             output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_summary_TeX.txt",'w')
             output_data_file.write(r'\begin{table}' + '\n')
             output_data_file.write('\centering' + '\n')
             output_data_file.write(r'\begin{tabular}{|c|c|c|c|c|c|}' + '\n')
             output_data_file.write('\cline{2-6}' + '\n')
             output_data_file.write(r'\multicolumn{1}{c}{\cellcolor{red!55}} & \multicolumn{5}{|c|}{Data Name}  \\      \hline' + '\n')
-            output_data_file.write(r'\backslashbox{$\calM_\beta$ - $\calM_\gamma$}{$\langle  U\rangle$}  & $\langle \vert \ln {\rm B}_{\beta \gamma}\vert \rangle$ & $\langle \vert \ln {\rm B}_{\beta \gamma} \vert \rangle_{{}_{\rm ML}}$ & $\deci_{\beta \gamma}$ & $\deci_{\beta \gamma}\vert_{{}_{\rm ML}}$ & $r_{{}_\mathrm{ML}}$ \\     \hline\hline' + '\n')
+            output_data_file.write(r'\backslashbox{${\cal M}_\beta$ - ${\cal M}_\gamma$}{$\langle  U\rangle$}  & $\langle \vert \ln {\rm B}_{\beta \gamma}\vert \rangle$ & $\langle \vert \ln {\rm B}_{\beta \gamma} \vert \rangle_{{}_{\rm ML}}$ & $\mathscr{D}_{\beta \gamma}$ & $\mathscr{D}_{\beta \gamma}\vert_{{}_{\rm ML}}$ & $r_{{}_\mathrm{ML}}$ \\     \hline\hline' + '\n')
             for k in range(0,number_of_models):
-                output_data_file.write('Model Pair ' + str(k) + ' & ' + str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2)) + ' & ' + str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+                if len(model_name_TeX_input) == 0:
+                    if self.mix_models_was_used == False:
+                        if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
+                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                        else: 
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                        if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
+                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                        else:
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+
+                        output_data_file.write('Model Pair ' + str(k) + '-' + str(0) + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+                    
+                    if self.mix_models_was_used == True:
+                        number_of_individual_models = int(0.5 + np.sqrt((2.0*number_of_models)+0.25)) - 1  
+                        # Compute the number of individual models 
+                        if k == 0: 
+                            target = number_of_individual_models-1
+                            new_count = 0
+                            previous_second_in_order = 0
+                            primary_count = 0
+                        # Initialise at k = 0
+
+                        second_in_order = primary_count
+                        if second_in_order != previous_second_in_order:
+                            new_count = 0
+                        first_in_order = second_in_order + new_count
+                        previous_second_in_order = second_in_order
+                        new_count += 1     
+
+                        if k == target: 
+                            primary_count += 1
+                            target += number_of_individual_models-primary_count
+                        # Compute the order in which the model pairs appear
+
+                        if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
+                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                        else: 
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                        if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
+                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                        else:
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+
+                        output_data_file.write('Model Pair ' + str(first_in_order) + '-' + str(second_in_order) + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+
+                else:
+                    if self.mix_models_was_used == False:
+                        if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
+                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                        else: 
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                        if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
+                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                        else:
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+
+                        output_data_file.write('Model Pair ' + model_name_TeX_input[k] + " - " + model_name_TeX_input[0] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+
+                    if self.mix_models_was_used == True:
+                        number_of_individual_models = int(0.5 + np.sqrt((2.0*number_of_models)+0.25)) - 1  
+                        # Compute the number of individual models 
+                        if k == 0: 
+                            target = number_of_individual_models-1
+                            new_count = 0
+                            previous_second_in_order = 0
+                            primary_count = 0
+                        # Initialise at k = 0
+
+                        second_in_order = primary_count
+                        if second_in_order != previous_second_in_order:
+                            new_count = 0
+                        first_in_order = second_in_order + new_count
+                        previous_second_in_order = second_in_order
+                        new_count += 1     
+
+                        if k == target: 
+                            primary_count += 1
+                            target += number_of_individual_models-primary_count
+                        # Compute the order in which the model pairs appear       
+
+                        if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
+                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                        else: 
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                        if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
+                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                        else:
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+
+                        output_data_file.write('Model Pair ' + model_name_TeX_input[first_in_order] + " - " + model_name_TeX_input[second_in_order] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+
             output_data_file.write('\end{tabular}' + '\n')
             output_data_file.write('\caption{Blah blah blah table...}' + '\n')
             output_data_file.write('\end{table}' + '\n')
@@ -789,17 +871,19 @@ class foxi:
         points = []
         # Initialise empty lists for samples
 
-        running_total = 0 # Initialize a running total of points read in from the data file
+        running_total = -1 # Initialize a running total of points read in from the data file
         
         with open(self.path_to_foxi_directory + "/" + self.output_directory + filename_choice) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
-                columns = line.split()
-                list_of_values = []
-                for number in column_numbers: 
-                    list_of_values.append(float(columns[number]))
-                points.append(list_of_values)
-                # Read in data points from the requested columns
+                if running_total != -1:
+                # Avoid reading the first line
+                    columns = line.split()
+                    list_of_values = []
+                    for number in column_numbers: 
+                        list_of_values.append(float(columns[number]))
+                    points.append(list_of_values)
+                    # Read in data points from the requested columns
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_samples: break # Finish once reached specified number of data points 
 

@@ -793,7 +793,7 @@ class foxi:
                         else:
                             mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
 
-                        output_data_file.write('Model Pair ' + model_name_TeX_input[k] + " - " + model_name_TeX_input[0] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+                        output_data_file.write(model_name_TeX_input[k] + " - " + model_name_TeX_input[0] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
 
                     if self.mix_models_was_used == True:
                         number_of_individual_models = int(0.5 + np.sqrt((2.0*number_of_models)+0.25)) - 1  
@@ -826,7 +826,7 @@ class foxi:
                         else:
                             mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
 
-                        output_data_file.write('Model Pair ' + model_name_TeX_input[first_in_order] + " - " + model_name_TeX_input[second_in_order] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
+                        output_data_file.write(model_name_TeX_input[first_in_order] + " - " + model_name_TeX_input[second_in_order] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
 
             output_data_file.write('\end{tabular}' + '\n')
             output_data_file.write('\caption{Blah blah blah table...}' + '\n')

@@ -7,6 +7,7 @@ rc('text',usetex=True)
 import pylab as pl
 import matplotlib.cm as cm
 import corner
+import math 
 from statsmodels.nonparametric.kernel_density import KDEMultivariate as kde
 
 class foxi:
@@ -34,11 +35,14 @@ class foxi:
         self.flashy_foxi
         self.set_column_types
         self.set_prior_column_types
+        self.set_forecast_data_prior
         self.column_types = []
         self.prior_column_types = []
+        self.forecast_data_priors = []
         self.column_functions 
         self.column_types_are_set = False
         self.prior_column_types_are_set = False
+        self.forecast_data_priors_are_set = False
         self.add_axes_labels
         self.axes_labels = []
         self.fontsize = 15
@@ -71,6 +75,12 @@ class foxi:
     # Input a list of strings to set the format of each column in prior samples i.e. flat, log, log10, ...
         self.prior_column_types = column_types
         self.prior_column_types_are_set = True # All columns are as input unless this is True
+
+
+    def set_forecast_data_prior(self,forecast_data_prior):
+    # Input a list of strings to set the forecast prior in each dimension i.e. flat or log 
+        self.forecast_data_prior = forecast_data_prior
+        self.forecast_data_priors_are_set = True # All columns are as input unless this is True
 
 
     def column_functions(self,i,input_value,prior=False):
@@ -375,9 +385,34 @@ class foxi:
     # Posterior probability at some point - prior_point_vector - in arbirary dimensions using a Gaussian 
     # forecast distribution given a fiducial point vector and error vector
         prior_point_vector = np.asarray(prior_point_vector) 
-        fiducial_point_vector = np.asarray(fiducial_point_vector)      
+        fiducial_point_vector = np.asarray(fiducial_point_vector)  
         error_vector = np.asarray(error_vector)
-        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(2.0*sum(np.log(error_vector))))
+
+        if self.forecast_data_priors_are_set == True:
+            log_prefactor = 1.0
+
+            for i in range(0,len(self.forecast_data_prior)):
+
+                if self.forecast_data_prior[i] == 'log': 
+                    log_prefactor *= 1.0/(prior_point_vector[i])
+                    # Log measure product for independent components
+                    
+                    prior_point_vector[i] = np.log(prior_point_vector[i])
+                    fiducial_point_vector[i] = np.log(fiducial_point_vector[i])
+                    # Take the logarithm of the relevant dimensions 
+
+            output = log_prefactor*(1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(sum(np.log(error_vector)))) 
+            # Implement a log-Gaussian in the dimensions that they are specified in self.forecast_data_prior
+
+        if self.forecast_data_priors_are_set == False: 
+            output = (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(sum(np.log(error_vector))))
+            # If self.forecast_data_prior has not been used then implement a flat Gaussian
+  
+        if np.isnan(output) == True:
+            output = 0.0
+            # This is only necessary when taking the log since negative values will ruin the summation
+
+        return output
 
 
     def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,mix_models=False): 
@@ -402,7 +437,7 @@ class foxi:
         number_of_prior_points     =  The number of points specified to be read off from the prior
 
 
-        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector  
+        error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector   
 
 
         mix_models                 =  Boolean - True computes U in all combinations of model comparison i.e. {i not j} U(M_i-M_j)
@@ -477,7 +512,7 @@ class foxi:
 
         
         # When using KDE method we quote the bandwidths used for each dimension for smoothing
-        print('Using the statsmodels module: http://statsmodels.sourceforge.net/')
+        print('Using the statsmodels module: http://www.statsmodels.org/stable/index.html')
         print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
         for i in range(0,len(self.model_name_list)):
              print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))

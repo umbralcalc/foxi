@@ -1,0 +1,11 @@
+Number of points in each category (defined in arxiv:XXXXXX) for each model:
+Model 0: n_A = 15 n_B = 0 n_C = 85 n_D = 0
+Model 1: n_A = 30 n_B = 0 n_C = 68 n_D = 2
+Model 2: n_A = 41 n_B = 0 n_C = 59 n_D = 0
+Model 3: n_A = 29 n_B = 0 n_C = 71 n_D = 0
+Model 4: n_A = 18 n_B = 0 n_C = 82 n_D = 0
+Model 5: n_A = 25 n_B = 0 n_C = 75 n_D = 0
+Model 6: n_A = 34 n_B = 5 n_C = 54 n_D = 7
+Model 7: n_A = 34 n_B = 0 n_C = 66 n_D = 0
+Model 8: n_A = 33 n_B = 0 n_C = 65 n_D = 2
+Model 9: n_A = 28 n_B = 0 n_C = 72 n_D = 0

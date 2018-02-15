@@ -10,13 +10,11 @@ prior_column_types = ['flat','flat'] # Set the format of each column in the prio
 number_of_points = 100 # How many points to read in from the forecast data chains
 number_of_prior_points = 100 # How many points to read in from the prior samples
 error_vector = [0.02,0.02,0.02] # Set some future predictions for the measurements on each parameter corresponding to the columns in e.g. 'chains_column_numbers'
-forecast_data_prior = ['flat','flat'] # Set the forecast data prior in each dimension
 
 new_foxi_instance = foxi('INSERT PATH TO foxi/') # Fire up a new instance of foxi
 new_foxi_instance.set_chains('INSERT FILENAME') # Set the name of the chains file 
 foxi_instance.set_column_types(column_types) # Comment/uncomment this feature where needed/not needed
 foxi_instance.set_prior_column_types(prior_column_types) # Comment/uncomment this feature where needed/not needed
-foxi_instance.set_forecast_data_prior(forecast_data_prior) # Comment/uncomment this feature where needed/not needed
 
 # Running to output foxiplot data file first...
 new_foxi_instance.set_model_name_list(model_list)

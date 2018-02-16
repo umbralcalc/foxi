@@ -8,7 +8,9 @@ import pylab as pl
 import matplotlib.cm as cm
 import corner
 import math 
+import scipy.stats as sps
 from statsmodels.nonparametric.kernel_density import KDEMultivariate as kde
+
 
 class foxi:
 # Initialize the 'foxi' method class
@@ -44,11 +46,29 @@ class foxi:
         self.axes_labels = []
         self.fontsize = 15
         self.decide_on_best_computation
-        
+        self.number_of_forecast_samples = 1000 # Number of samples to take from the forecast distribution 
+        self.flat_function
+        self.exp_function
+        self.power10_function
+        self.dictionary_of_column_types = {'flat': self.flat_function, 'log': self.exp_function, 'log10': self.power10_function}
+        self.number_of_maxed_evidences = 0     
+
 
     def set_chains(self,name_of_chains): 
     # Set the file name of the chains of the current data set
         self.current_data_chains = name_of_chains
+
+    
+    def flat_function(self,x):
+        return x
+
+    
+    def exp_function(self,x):
+        return np.exp(x)
+
+
+    def power10_function(self,x):
+        return 10.0**(x)
 
 
     def set_model_name_list(self,model_name_list): 
@@ -74,16 +94,17 @@ class foxi:
         self.prior_column_types_are_set = True # All columns are as input unless this is True
 
 
-    def column_functions(self,i,input_value,prior=False):
+    def set_number_of_forecast_samples(self,number_of_forecast_samples):
+    # Change the number of samples to take from the forecast likelihood distribution when computing the evidence integrals
+        self.number_of_forecast_samples = number_of_forecast_samples
+
+
+    def column_functions(self,input_value,prior=False):
     # Choose to transform whichever column according to its format
         if prior == False:
-            if self.column_types[i] == 'flat': return input_value
-            if self.column_types[i] == 'log': return np.exp(input_value)
-            if self.column_types[i] == 'log10': return 10.0**(input_value)
-        if prior == True:
-            if self.prior_column_types[i] == 'flat': return input_value
-            if self.prior_column_types[i] == 'log': return np.exp(input_value)
-            if self.prior_column_types[i] == 'log10': return 10.0**(input_value)
+            return [self.dictionary_of_column_types[self.column_types[i]](input_value[i]) for i in range(0,len(self.column_types))]
+        else:
+            return [self.dictionary_of_column_types[self.prior_column_types[i]](input_value[i]) for i in range(0,len(self.prior_column_types))]
 
 
     def add_axes_labels(self,list_of_labels,fontsize):
@@ -114,25 +135,16 @@ class foxi:
             # fiducial likelihood error vector in each dimension to decide if the prior samples can give a decent estimate. 
             # Otherwise we simply use the kde method to estimate the evidence and Maximum Likelihood
                 use_sampling = True
-                for k in range(0,len(error_vector)):
-                    if np.sqrt(self.density_functions[model_index].bw[k]) > error_vector[k]:
-                        use_sampling = False
+                if any(value > 0.0 for value in np.asarray(np.sqrt(self.density_functions[model_index].bw)) - np.asarray(error_vector)):
+                    use_sampling = False
+
                 if use_sampling == False:
                     model_ML = kde_model_ML
                     model_evidence = kde_model_ML
-                    for k in range(0,len(fiducial_point_vector)):
-                    # Loop over each fiducial point dimension in the evidence estimate
 
-                         one_sigma_vector = np.zeros(len(fiducial_point_vector))
-                         one_sigma_vector[k] = error_vector[k]
-                         # Construct a jump vector of order 1-sigma in each dimension                      
- 
-                         model_evidence += self.density_functions[model_index].pdf(fiducial_point_vector+one_sigma_vector)*forecast_data_function(fiducial_point_vector+one_sigma_vector,fiducial_point_vector,error_vector)
-                         model_evidence += self.density_functions[model_index].pdf(fiducial_point_vector-one_sigma_vector)*forecast_data_function(fiducial_point_vector-one_sigma_vector,fiducial_point_vector,error_vector)
-                         # Make the jumps and compute the contributions to the total evidence of the model for each corresponding point
+                    model_evidence = np.sum(self.density_functions[model_index].pdf(forecast_data_function(fiducial_point_vector,fiducial_point_vector,error_vector,samples=self.number_of_forecast_samples)))/float(self.number_of_forecast_samples)
+                    # Compute the evidence using samples from the forecast likelihood distribution and the local prior density
 
-                    model_evidence /= 1.0 + (2.0*float(len(fiducial_point_vector)+1))
-                    # In order to estimate the evidence with only a few points of the fiducial point distribution (future data) compute each pair of 1-sigma intervals for each dimension then sum up over them, dividing by the total number of points used in the estimate
                 if use_sampling == True:
                     model_ML = samples_model_ML
                     model_evidence = samples_model_evidence 
@@ -236,12 +248,13 @@ class foxi:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
                 columns = line.split()
-                fiducial_point_vector_for_integral = [] 
-                for j in range(0,len(chains_column_numbers)):
-                    if self.column_types_are_set == True: 
-                        fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: 
-                        fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
+                columns = np.asarray(columns).astype(np.float)
+ 
+                if self.column_types_are_set == True: 
+                    fiducial_point_vector_for_integral = self.column_functions(np.asarray(columns[chains_column_numbers]))
+                else: 
+                    fiducial_point_vector_for_integral = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
+                
                 forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
                 # Compute the normalisation for the dkl value later on...                
 
@@ -263,13 +276,12 @@ class foxi:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
                 for line in file:
                     columns = line.split()
-                    prior_point_vector = [] 
-
-                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                        if self.prior_column_types_are_set == True: 
-                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
-                        if self.prior_column_types_are_set == False: 
-                            prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    columns = np.asarray(columns).astype(np.float)
+                    
+                    if self.prior_column_types_are_set == True: 
+                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
+                    else:
+                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
                         
                     E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
@@ -294,6 +306,7 @@ class foxi:
             count_elements = 0
             # Count the elements to the arrays listing U for each model pair on the fly
  
+
         for j in range(0,len(self.model_name_list)):      
         # Summation over the model priors 
             if mix_models == False: 
@@ -346,19 +359,20 @@ class foxi:
                     count_elements+=1 # Iterate the element counter for the arrays           
 
                 avoid_repeat+=1 # Iterate the avoidance of repeating a model pair in the two-fold loop 
-                
+        
+        
         running_total = 0 # Initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
                 columns = line.split()
-                fiducial_point_vector_for_integral = [] 
-                for j in range(0,len(chains_column_numbers)):
-                    if self.column_types_are_set == True: 
-                        fiducial_point_vector_for_integral.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: 
-                        fiducial_point_vector_for_integral.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
+                columns = np.asarray(columns).astype(np.float)
+                
+                if self.column_types_are_set == True: 
+                    fiducial_point_vector_for_integral = self.column_functions(np.asarray(columns[chains_column_numbers]))
+                else:
+                    fiducial_point_vector_for_integral = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
                 
                 logargument = float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation
                 dkl = (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument)
@@ -372,13 +386,20 @@ class foxi:
         # point in the case of each model pair - this is used in the Maximum Likelihood average procedure in rerun_foxi
 
    
-    def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector):
+    def gaussian_forecast(self,prior_point_vector,fiducial_point_vector,error_vector,samples=None):
     # Posterior probability at some point - prior_point_vector - in arbirary dimensions using a Gaussian 
     # forecast distribution given a fiducial point vector and error vector
         prior_point_vector = np.asarray(prior_point_vector) 
         fiducial_point_vector = np.asarray(fiducial_point_vector)  
         error_vector = np.asarray(error_vector)
-        return (1.0/((2.0*np.pi)**(0.5*len(error_vector))))*np.exp(-0.5*(sum(((prior_point_vector-fiducial_point_vector)/error_vector)**2))+(sum(np.log(error_vector))))
+        covmat = np.identity(len(error_vector))*(error_vector**2)
+
+        if samples:
+            return np.random.multivariate_normal(fiducial_point_vector,covmat,samples)
+            # Return a number of samples from the forecast distribution if sample number is chosen
+        else:
+            return sps.multivariate_normal(fiducial_point_vector,covmat).pdf(prior_point_vector)
+            # Return a density if sample number is not chosen
 
 
     def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,mix_models=False): 
@@ -454,12 +475,12 @@ class foxi:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
                 for line in file:
                     columns = line.split()
-                    prior_point_vector = [] 
-                    for j in range(0,len(prior_column_numbers[i])): # Take a prior point 
-                        if self.prior_column_types_are_set == True: 
-                            prior_point_vector.append(self.column_functions(j,float(columns[prior_column_numbers[i][j]]),prior=True))
-                        if self.prior_column_types_are_set == False: 
-                            prior_point_vector.append(float(columns[prior_column_numbers[i][j]])) # All columns are as input unless this is True
+                    columns = np.asarray(columns).astype(np.float)
+
+                    if self.prior_column_types_are_set == True: 
+                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
+                    else: 
+                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
                     
                     prior_data.append(np.asarray(prior_point_vector)) # Store the data for the KDE
                                       
@@ -489,28 +510,18 @@ class foxi:
         # Compute quantities in loop dynamically as with open(..) reads off the chains
             for line in file:
                 columns = line.split()
-                fiducial_point_vector = [] 
-                for j in range(0,len(chains_column_numbers)):
-                    if self.column_types_are_set == True: 
-                        fiducial_point_vector.append(self.column_functions(j,float(columns[chains_column_numbers[j]])))
-                    if self.column_types_are_set == False: 
-                        fiducial_point_vector.append(float(columns[chains_column_numbers[j]])) # All columns are flat formats unless this is True
+                columns = np.asarray(columns).astype(np.float)              
+
+                if self.column_types_are_set == True: 
+                    fiducial_point_vector = self.column_functions(np.asarray(columns[chains_column_numbers]))
+                else: 
+                    fiducial_point_vector = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
+
                 [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=mix_models)
                 
-                for value in fiducial_point_vector:
-                    plot_data_file.write(str(value) + "\t") # Output fiducial point values
-                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                for value in abslnB:
-                    plot_data_file.write(str(value) + "\t") # Output absolute log Bayes factor values
-                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                for value in lnE:
-                    plot_data_file.write(str(value) + "\t") # Output raw log evidence values
-                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                for value in valid_ML:
-                    plot_data_file.write(str(value) + "\t") # Output binary indicator values of Maximum Likelihood average
-                plot_data_file.write(str(running_total) + "\t") # This bit helps identify a gap between output types on a line
-                plot_data_file.write(str(DKL) + "\n")
-                # Write data to file if requested                    
+                plot_data_file.write("\t".join(map(str, np.asarray(fiducial_point_vector))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(abslnB))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(lnE))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(valid_ML))) +  "\t"  +  str(running_total)  +  "\t"  +  str(DKL) + "\n") 
+                # Output fiducial point values etc... and other data to file if requested 
+
 
                 running_total+=1 # Also add to the running total
                 if running_total >= number_of_points: break # Finish once reached specified number of data points 
@@ -963,5 +974,6 @@ class foxi:
         print('      DISTRIBUTED UNDER MIT LICENSE       ')
         print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
         print('                                          ')
+
 
 

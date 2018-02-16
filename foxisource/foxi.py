@@ -50,8 +50,7 @@ class foxi:
         self.flat_function
         self.exp_function
         self.power10_function
-        self.dictionary_of_column_types = {'flat': self.flat_function, 'log': self.exp_function, 'log10': self.power10_function}
-        self.number_of_maxed_evidences = 0     
+        self.dictionary_of_column_types = {'flat': self.flat_function, 'log': self.exp_function, 'log10': self.power10_function}    
 
 
     def set_chains(self,name_of_chains): 
@@ -80,6 +79,9 @@ class foxi:
         self.number_of_category_C_points = [0 for i in model_name_list]
         self.number_of_category_D_points = [0 for i in model_name_list]
         # Initialise a count for each model in their category of points (see arxiv:XXXXXX)
+        self.number_of_maxed_evidences = [0 for i in model_name_list]
+        # Initialise the count for the number of maxed evidences - the number of evidences in each model point for which
+        # the numerical precision is reached at abslnB >= 1000 
 
 
     def set_column_types(self,column_types):
@@ -316,6 +318,9 @@ class foxi:
                 # specific model pair (model j and the reference model 0)
   
                 if E[j] == 0.0:
+                    self.number_of_maxed_evidences[j] += 1
+                    # Update the number of maxed evidences for this model
+
                     if E[0] == 0.0:
                         abslnB[j] = 0.0
                     else:
@@ -333,6 +338,10 @@ class foxi:
                     if j > 0: decisivity[j] = 1.0 # Compute decisivity utility (for each new forecast distribution this is either 1 or 0)            
  
             if mix_models == True: 
+                if E[j] == 0.0:
+                    self.number_of_maxed_evidences[j] += 1
+                    # Update the number of maxed evidences for this model
+
                 for k in range(avoid_repeat,len(self.model_name_list)):      
                 # Two-fold summation over the model priors if in `mix_model mode' 
                     if model_valid_ML[k] == 1.0 or model_valid_ML[j] == 1.0:
@@ -537,6 +546,11 @@ class foxi:
             # Write output
 
         points_category_file.close()
+
+        print('\n' + 'Number of maxed-out evidences for each model:' + '\n')
+        for i in range(0,len(self.model_name_list)):
+            print('Model ' + str(i) + ': ' + str(self.number_of_maxed_evidences[i]))
+            # Print out the number of maxed-out evidences for each model at the end of the computation
 
 
     def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False,model_name_TeX_input=[]): 

@@ -26,5 +26,5 @@ number_of_foxiplot_samples = 100 # How many points to read in from the foxiplot 
 prior_types = ['flat','flat','flat'] # Set the type of predictive prior weight in each column of the fiducial points - choose from 'flat' or 'log'
 TeX_output = True # Output a fancy LaTeX table with the relevant data for each model pair
 
-rerun_foxi_instance = foxi('/home/robert/work/foxi_train') # Fire up a new instance of foxi for a rerun to obtain secondary quantities
+rerun_foxi_instance = foxi('/home/.../foxi') # Fire up a new instance of foxi for a rerun to obtain secondary quantities
 rerun_foxi_instance.rerun_foxi(foxiplot_file,number_of_foxiplot_samples,prior_types,TeX_output=TeX_output)

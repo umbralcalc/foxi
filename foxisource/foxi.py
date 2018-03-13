@@ -39,6 +39,7 @@ class foxi:
         self.set_prior_column_types
         self.column_types = []
         self.prior_column_types = []
+        self.chains_data = []
         self.column_functions 
         self.column_types_are_set = False
         self.prior_column_types_are_set = False
@@ -82,6 +83,8 @@ class foxi:
         self.number_of_maxed_evidences = [0 for i in model_name_list]
         # Initialise the count for the number of maxed evidences - the number of evidences in each model point for which
         # the numerical precision is reached at abslnB >= 1000 
+        self.prior_data = [[] for i in model_name_list]
+        # Define prior data storage
 
 
     def set_column_types(self,column_types):
@@ -246,22 +249,18 @@ class foxi:
 
         running_total = 0 # Initialize a running total of points read in from the chains
 
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                columns = np.asarray(columns).astype(np.float)
- 
-                if self.column_types_are_set == True: 
-                    fiducial_point_vector_for_integral = self.column_functions(np.asarray(columns[chains_column_numbers]))
-                else: 
-                    fiducial_point_vector_for_integral = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
-                
-                forecast_data_function_normalisation += forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)
-                # Compute the normalisation for the dkl value later on...                
+        forecast_data_function_normalisation = np.sum(forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector))
+        # Compute the normalisation for the dkl value
 
-                running_total+=1 # Also add to the running total                         
-                if running_total >= number_of_points: break # Finish once reached specified number points
+        logargument = np.asarray(float(number_of_points)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector)/forecast_data_function_normalisation)
+
+        dkl = np.asarray((forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument))
+        dkl[np.isnan(dkl)] = 0.0
+        dkl[np.isinf(dkl)] = 0.0
+        # Remove potential infinite and NAN values
+
+        DKL = np.sum(dkl)
+        # Compute the dkl
 
         for i in range(0,len(self.model_name_list)):
             
@@ -274,26 +273,11 @@ class foxi:
             samples_model_ML = 0.0
             # Initialise the maximum likelihood to be obtained from the model samples
                
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                for line in file:
-                    columns = line.split()
-                    columns = np.asarray(columns).astype(np.float)
-                    
-                    if self.prior_column_types_are_set == True: 
-                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
-                    else:
-                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
-                        
-                    E[i] += forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)/float(number_of_prior_points)
-                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+            E[i] = np.sum(forecast_data_function(np.asarray(self.prior_data[i]),fiducial_point_vector,error_vector)/float(number_of_prior_points))
+            # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
 
-                    if forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector) > samples_model_ML: 
-                        samples_model_ML = forecast_data_function(prior_point_vector,fiducial_point_vector,error_vector)
-                    # If one of the prior points has a larger maximum likelihood then replace the previous best
-
-                    running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points 
+            samples_model_ML = np.max(forecast_data_function(np.asarray(self.prior_data[i]),fiducial_point_vector,error_vector))
+            # Compute the maximum likelihood to be obtained from the model samples                    
 
             [model_ML,E[i]] = self.decide_on_best_computation(ML_point,samples_model_ML,kde_model_ML,E[i],error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,i)
             # Use a specified procedure to decide on which of the methods is best to use for computation
@@ -371,24 +355,6 @@ class foxi:
         
         
         running_total = 0 # Initialize a running total of points read in from the chains
-
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                columns = np.asarray(columns).astype(np.float)
-                
-                if self.column_types_are_set == True: 
-                    fiducial_point_vector_for_integral = self.column_functions(np.asarray(columns[chains_column_numbers]))
-                else:
-                    fiducial_point_vector_for_integral = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
-                
-                logargument = float(number_of_points)*forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation
-                dkl = (forecast_data_function(fiducial_point_vector_for_integral,fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument)
-                if np.isnan(dkl) == False and logargument > 0.0: DKL += dkl # Conditions to avoid problems in the logarithm
-
-                running_total+=1 # Also add to the running total                         
-                if running_total >= number_of_points: break # Finish once reached specified number points
 
         return [abslnB,decisivity,DKL,np.log(E),valid_ML] 
         # Output utilities, raw log evidences and binary indicator variables in 'valid_ML' to either validate (1.0) or invalidate (0.0) the fiducial 
@@ -477,8 +443,6 @@ class foxi:
         for i in range(0,len(self.model_name_list)):  
          
             running_total = 0 # Initialize a running total of points read in from each prior      
- 
-            prior_data = [] # Initialize empty list for the new prior data
 
             with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
             # Compute quantities in loop dynamically as with open(..) reads off the prior values
@@ -491,17 +455,17 @@ class foxi:
                     else: 
                         prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
                     
-                    prior_data.append(np.asarray(prior_point_vector)) # Store the data for the KDE
+                    self.prior_data[i].append(np.asarray(prior_point_vector)) # Store the data for the KDE
                                       
                     # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
                     running_total+=1 # Also add to the running total                         
                     if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
-            
+
             c_string = ''
             for j in range(0,len(prior_column_numbers[i])): c_string += 'c'
             # Silly notational detail to get the kde to work for continuous variables in all dimensions    
 
-            self.density_functions.append(kde(prior_data,var_type=c_string)) # Append a new Density Estimation function to the list for use later
+            self.density_functions.append(kde(self.prior_data[i],var_type=c_string)) # Append a new Density Estimation function to the list for use later
             # Kernel Density Estimation uses statsmodels.nonparametric toolkit to estimate the 
             # density locally at the fiducial point itself, ensuring that there are no lost points
             # within each prior volume 'hull'
@@ -516,7 +480,7 @@ class foxi:
         running_total = 0 # Re-initialize a running total of points read in from the chains
 
         with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Compute quantities in loop dynamically as with open(..) reads off the chains
+        # Loop dynamically with open(..) reads off the chains
             for line in file:
                 columns = line.split()
                 columns = np.asarray(columns).astype(np.float)              
@@ -526,14 +490,19 @@ class foxi:
                 else: 
                     fiducial_point_vector = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
 
-                [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(fiducial_point_vector,chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=mix_models)
-                
-                plot_data_file.write("\t".join(map(str, np.asarray(fiducial_point_vector))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(abslnB))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(lnE))) +  "\t"  +  str(running_total)  +  "\t"  +  "\t".join(map(str, np.asarray(valid_ML))) +  "\t"  +  str(running_total)  +  "\t"  +  str(DKL) + "\n") 
-                # Output fiducial point values etc... and other data to file if requested 
-
+                self.chains_data.append(fiducial_point_vector)
 
                 running_total+=1 # Also add to the running total
-                if running_total >= number_of_points: break # Finish once reached specified number of data points 
+                if running_total >= number_of_points: break # Finish once reached specified number of data points
+
+
+        for j in range(0,len(self.chains_data)):
+        # Compute utilities with stored chains 
+        
+            [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(self.chains_data[j],chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=mix_models)
+                
+            plot_data_file.write("\t".join(map(str, np.asarray(self.chains_data[j]))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(abslnB))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(lnE))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(valid_ML))) +  "\t"  +  str(j)  +  "\t"  +  str(DKL) + "\n") 
+                # Output fiducial point values etc... and other data to file if requested  
        
         plot_data_file.close() 
 

@@ -734,13 +734,13 @@ class foxi:
                 if len(model_name_TeX_input) == 0:
                     if self.mix_models_was_used == False:
                         if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
-                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         else: 
-                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(< ' + str(round(2.0*np.sqrt(som_abslnB[k]),2)) + ')$'
                         if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
-                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
                         else:
-                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB_ML[k],2)) + '}' + '$'
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(< ' + str(round(2.0*np.sqrt(som_abslnB_ML[k]),2)) + ')$'
 
                         output_data_file.write('Model Pair ' + str(k) + '-' + str(0) + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
                     
@@ -767,26 +767,26 @@ class foxi:
                         # Compute the order in which the model pairs appear
 
                         if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
-                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         else: 
-                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(< ' + str(round(2.0*np.sqrt(som_abslnB[k]),2)) + ')$'
                         if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
-                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
                         else:
-                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB_ML[k],2)) + '}' + '$'
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(< ' + str(round(2.0*np.sqrt(som_abslnB_ML[k]),2)) + ')$'
 
                         output_data_file.write('Model Pair ' + str(first_in_order) + '-' + str(second_in_order) + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
 
                 else:
                     if self.mix_models_was_used == False:
                         if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
-                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         else: 
-                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(< ' + str(2.0*round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
-                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
                         else:
-                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB_ML[k],2)) + '}' + '$'
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(< ' + str(2.0*round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
 
                         output_data_file.write(model_name_TeX_input[k] + " - " + model_name_TeX_input[0] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
 
@@ -813,13 +813,13 @@ class foxi:
                         # Compute the order in which the model pairs appear       
 
                         if round(np.sqrt(som_abslnB[k]),2) < round(expected_abslnB[k],2):
-                            mid_string_1 = str(round(expected_abslnB[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB[k]),2))
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         else: 
-                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB[k]),2)) + '}_{-' + str(round(expected_abslnB[k],2)) + '}' + '$'
+                            mid_string_1 = '$' + str(round(expected_abslnB[k],2)) + ' \,(< ' + str(2.0*round(np.sqrt(som_abslnB[k]),2)) + ')$'
                         if round(np.sqrt(som_abslnB_ML[k]),2) < round(expected_abslnB_ML[k],2):
-                            mid_string_2 = str(round(expected_abslnB_ML[k],2)) + ' $\pm$ ' + str(round(np.sqrt(som_abslnB_ML[k]),2))
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(\pm ' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
                         else:
-                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + '^{+' + str(round(np.sqrt(som_abslnB_ML[k]),2)) + '}_{-' + str(round(expected_abslnB_ML[k],2)) + '}' + '$'
+                            mid_string_2 = '$' + str(round(expected_abslnB_ML[k],2)) + ' \,(< ' + str(2.0*round(np.sqrt(som_abslnB_ML[k]),2)) + ')$'
 
                         output_data_file.write(model_name_TeX_input[first_in_order] + " - " + model_name_TeX_input[second_in_order] + ' & ' + mid_string_1 + ' & ' + mid_string_2 + ' & ' + str(round(decisivity[k],2)) + ' & ' + str(round(decisivity_ML[k],2)) + ' & ' + str(round(proportion_of_ML_failures[k],2)) + r'  \\      \hline' + '\n')
 

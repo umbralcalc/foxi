@@ -6,9 +6,9 @@ Using information theory and Bayesian inference this python package computes a s
 
 ### The expected utilities used include...
 
-1. The expected ln-Bayes factor between models and its Maximum-Likelihood averaged equivalent (see arxiv:XXXXXXXX).
+1. The expected ln-Bayes factor between models and its Maximum-Likelihood averaged equivalent (see arxiv:1803.09491).
 
-2. The decisivity between models (see arxiv:XXXXXXXX) its Maximum-likelihood averaged equivalent.
+2. The decisiveness between models (see arxiv:1803.09491) and its Maximum-likelihood averaged equivalent, the decisivity.
 
 3. The expected Kullback-Leibler divergence (or information gain) of the futuristic dataset.
 

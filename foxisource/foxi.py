@@ -79,7 +79,7 @@ class foxi:
         self.number_of_category_B_points = [0 for i in model_name_list]
         self.number_of_category_C_points = [0 for i in model_name_list]
         self.number_of_category_D_points = [0 for i in model_name_list]
-        # Initialise a count for each model in their category of points (see arxiv:XXXXXX)
+        # Initialise a count for each model in their category of points (see arxiv:1803.09491)
         self.number_of_maxed_evidences = [0 for i in model_name_list]
         # Initialise the count for the number of maxed evidences - the number of evidences in each model point for which
         # the numerical precision is reached at abslnB >= 1000 
@@ -507,9 +507,9 @@ class foxi:
         plot_data_file.close() 
 
         points_category_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_number_points_categories.txt",'w')
-        # Initialize output file containing the counts of each category of point (defined in arxiv:XXXXXX)   
+        # Initialize output file containing the counts of each category of point (defined in arxiv:1803.09491)   
 
-        points_category_file.write('Number of points in each category (defined in arxiv:XXXXXX) for each model:' + '\n')
+        points_category_file.write('Number of points in each category (defined in arxiv:1803.09491) for each model:' + '\n')
         for i in range(0,len(self.model_name_list)):
             points_category_file.write('Model ' + str(i) + ": " + "n_A = " + str(self.number_of_category_A_points[i]) + " " + "n_B = " + str(self.number_of_category_B_points[i]) + " " + "n_C = " + str(self.number_of_category_C_points[i]) + " " + "n_D = " + str(self.number_of_category_D_points[i]) + '\n')
             # Write output

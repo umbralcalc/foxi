@@ -10,9 +10,10 @@ prior_column_types = ['flat','flat'] # Set the format of each column in the prio
 number_of_points = 100 # How many points to read in from the forecast data chains
 number_of_prior_points = 100 # How many points to read in from the prior samples
 error_vector = [0.02,0.02,0.02] # Set some future predictions for the measurements on each parameter corresponding to the columns in e.g. 'chains_column_numbers'
+weights_column_number = 0 # Set the column number for the weights in the chains - if this keyword is not set in 'set_chains' the default is 1.0 for all points
 
 new_foxi_instance = foxi('INSERT PATH TO foxi/') # Fire up a new instance of foxi
-new_foxi_instance.set_chains('INSERT FILENAME') # Set the name of the chains file 
+new_foxi_instance.set_chains('INSERT FILENAME',weights_column=weights_column_number) # Set the name of the chains file 
 foxi_instance.set_column_types(column_types) # Comment/uncomment this feature where needed/not needed
 foxi_instance.set_prior_column_types(prior_column_types) # Comment/uncomment this feature where needed/not needed
 

@@ -2,7 +2,9 @@
 
 ### Futuristic Observations and their eXpected Information
 
-Using information theory and Bayesian inference this python package computes a suite of expected utilities given futuristic observations in a flexible and user-friendly way. In principle, all one needs to make use of foxi is a set of n-dim prior samples for each model and one set of n-dim samples from the current data.
+Using information theory and Bayesian inference this python package computes a suite of expected utilities given futuristic observations in a flexible and user-friendly way. In principle, all one needs to make use of foxi is a set of n-dim prior samples for each model and one set of n-dim samples from the current data. 
+
+05/08/2018 - New features including support for forecast Fisher matrices!!! Example script to follow in due course.  
 
 ### The expected utilities used include...
 
@@ -27,3 +29,4 @@ To fork, simply type into the terminal:
 > cd foxi/foxiscripts
 
 and take a look!
+

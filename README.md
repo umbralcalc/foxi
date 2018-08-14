@@ -8,9 +8,9 @@ This python package computes a suite of expected utilities which are based on in
 
 ### The expected utilities used include...
 
-1. The expected ln-Bayes factor between models and its Maximum-Likelihood averaged equivalent (see arxiv:1803.09491).
+1. The expected ln-Bayes factor between models and its Maximum-Likelihood averaged equivalent (see [https://arxiv.org/abs/1803.09491]).
 
-2. The decisiveness between models (see arxiv:1803.09491) and its Maximum-likelihood averaged equivalent, the decisivity.
+2. The decisiveness between models (see [https://arxiv.org/abs/1803.09491]) and its Maximum-likelihood averaged equivalent, the decisivity.
 
 3. The expected Kullback-Leibler divergence (or information gain) of the futuristic dataset.
 

@@ -2,9 +2,9 @@
 
 ### Futuristic Observations and their eXpected Information
 
-Using information theory and Bayesian inference this python package computes a suite of expected utilities given futuristic observations in a flexible and user-friendly way. In principle, all one needs to make use of foxi is a set of n-dim prior samples for each model and one set of n-dim samples from the current data. 
+This python package computes a suite of expected utilities which are based on information theory and Bayesian inference, given futuristic observations, in a flexible and user-friendly way. For example, in principle, all one needs to make use of **foxi** is a set of n-dim prior samples for each model and one set of n-dim samples from the current data. 
 
-05/08/2018 - New features including support for forecast Fisher matrices!!! Example script to follow in due course.
+05/08/2018 - New features including support for forecast Fisher matrices!!! 
 
 ### The expected utilities used include...
 
@@ -16,7 +16,7 @@ Using information theory and Bayesian inference this python package computes a s
 
 ### Main features
 
-Flexible inputs – usable essentially for any forecasting problem in science with suitable samples. foxi is designed for all-in-one script calculation or an initial cluster run then local machine post-processing, which should make large jobs quite manageable subject to resources. We have added features such $\LaTeX$ tables and plot making for post-data analysis visuals and convenience of presentation. In addition, we have designed some user-friendly scripts with plenty of comments to get familiar with foxi.
+Flexible inputs – usable essentially for any forecasting problem in science with suitable samples. foxi is designed for all-in-one script calculation or an initial cluster run then local machine post-processing, which should make large jobs quite manageable subject to resources. We have added features such LaTeX tables and plot making for post-data analysis visuals and convenience of presentation. In addition, we have designed some user-friendly scripts with plenty of comments to get familiar with **foxi**.
 
 ## Getting started
 
@@ -24,7 +24,9 @@ To fork, simply type into the terminal:
 
 > git clone https://github.com/umbralcalc/foxi.git 
 
-In the `/foxiscripts` directory there is an ipython notebook with a worked 5-dimensional example available: [https://github.com/umbralcalc/foxi/tree/master/foxiscripts/5D_example.ipynb]. This demonstrates most of the main features within the `foxi` class.
+In the `/foxiscripts` directory there is an ipython notebook with a worked 5-dimensional example available: 
+[https://github.com/umbralcalc/foxi/tree/master/foxiscripts/5D_example.ipynb]. 
+This demonstrates most of the main features within the `foxi` class.
 
 
 

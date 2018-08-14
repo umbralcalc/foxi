@@ -4,6 +4,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import rc
 rc('text',usetex=True)
+rc('text.latex',preamble=r'\usepackage{mathrsfs}')
 import pylab as pl
 import matplotlib.cm as cm
 import corner
@@ -38,8 +39,6 @@ class foxi:
         self.set_fisher_matrix
         self.fisher_matrix_forecast
         self.flashy_foxi
-        self.set_column_types
-        self.set_prior_column_types
         self.column_types = []
         self.prior_column_types = []
         self.chains_data = [] 
@@ -57,16 +56,52 @@ class foxi:
         self.flat_function
         self.exp_function
         self.power10_function
+        self.analytic_estimates
+        self.FPS_derivative
         self.dictionary_of_column_types = {'flat': self.flat_function, 'log': self.exp_function, 'log10': self.power10_function}    
 
 
-    def set_chains(self,name_of_chains,weights_column=None): 
+    def set_chains(self,name_of_chains,chains_column_numbers,number_of_points,weights_column=None,column_types=None): 
     # Set the file name of the chains of the current data set
         self.current_data_chains = name_of_chains
+
+        self.chains_column_numbers = chains_column_numbers
+        # A list of the numbers of the columns in the chains that correspond to the parameters of interest, starting with 0. These should be in the same order as all other structures
+
+        self.number_of_points = number_of_points # The number of points specified to be read off from the current data chains
+  
         if weights_column: 
             self.current_data_chains_weights_column = weights_column
             self.chains_weights_are_set = True
         # Set a number (starting at 0) for the column of the weights in the chains (if there is one)
+
+        if column_types:
+            self.column_types = column_types # Input a list of strings to set the format of each column in data chains i.e. flat, log, log10, ...
+            self.column_types_are_set = True # All columns are as input unless this is True
+
+        running_total = 0 # Initialize a running total of points read in from the chains
+
+        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
+        # Loop dynamically with open(..) reads off the chains
+            for line in file:
+                columns = line.split()
+                columns = np.asarray(columns).astype(np.float)              
+
+                if self.chains_weights_are_set == True: 
+                    self.chains_weights.append(columns[self.current_data_chains_weights_column])
+                else:
+                    self.chains_weights.append(1.0)
+                # Set the chain weights either to the alloted column or to the default of 1.0 at each point
+
+                if self.column_types_are_set == True: 
+                    fiducial_point_vector = self.column_functions(np.asarray(columns[chains_column_numbers]))
+                else: 
+                    fiducial_point_vector = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
+
+                self.chains_data.append(fiducial_point_vector)
+
+                running_total+=1 # Also add to the running total
+                if running_total >= number_of_points: break # Finish once reached specified number of data points
 
     
     def flat_function(self,x):
@@ -81,7 +116,7 @@ class foxi:
         return 10.0**(x)
 
 
-    def set_model_name_list(self,model_name_list): 
+    def set_model_name_list(self,model_name_list,prior_column_numbers,number_of_prior_points,prior_column_types=None): 
     # Set the name list of models which can then be referred to by number for simplicity
         self.model_name_list = model_name_list
         # Input the .txt or .dat file names in the foxipriors/ directory
@@ -96,17 +131,54 @@ class foxi:
         self.prior_data = [[] for i in model_name_list]
         # Define prior data storage
 
+        self.prior_column_numbers = prior_column_numbers
+        # A 2D list [i][j] of the numbers of the columns j in the prior for model i that correspond to the parameters of interest, starting with 0. These should be in the same order as all other structures 
 
-    def set_column_types(self,column_types):
-    # Input a list of strings to set the format of each column in data chains i.e. flat, log, log10, ...
-        self.column_types = column_types
-        self.column_types_are_set = True # All columns are as input unless this is True
+        self.number_of_prior_points = number_of_prior_points # The number of points specified to be read off from the prior
 
+        if prior_column_types:
+            self.prior_column_types = prior_column_types # Input a list of strings to set the format of each column in prior samples i.e. flat, log, log10, ...
+            self.prior_column_types_are_set = True # All columns are as input unless this is True
 
-    def set_prior_column_types(self,column_types):
-    # Input a list of strings to set the format of each column in prior samples i.e. flat, log, log10, ...
-        self.prior_column_types = column_types
-        self.prior_column_types_are_set = True # All columns are as input unless this is True
+        self.density_functions = []
+        # Initialise an empty list of density functions that may or may not be used
+
+        for i in range(0,len(self.model_name_list)):  
+         
+            running_total = 0 # Initialize a running total of points read in from each prior      
+
+            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
+            # Compute quantities in loop dynamically as with open(..) reads off the prior values
+                for line in file:
+                    columns = line.split()
+                    columns = np.asarray(columns).astype(np.float)
+
+                    if self.prior_column_types_are_set == True: 
+                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
+                    else: 
+                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
+                    
+                    self.prior_data[i].append(np.asarray(prior_point_vector)) # Store the data for the KDE
+                                      
+                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
+                    running_total+=1 # Also add to the running total                         
+                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
+
+            c_string = ''
+            for j in range(0,len(prior_column_numbers[i])): c_string += 'c'
+            # Silly notational detail to get the kde to work for continuous variables in all dimensions    
+
+            self.density_functions.append(kde(self.prior_data[i],var_type=c_string)) # Append a new Density Estimation function to the list for use later
+            # Kernel Density Estimation uses statsmodels.nonparametric toolkit to estimate the 
+            # density locally at the fiducial point itself, ensuring that there are no lost points
+            # within each prior volume 'hull'
+
+        
+        # When using KDE method we quote the bandwidths used for each dimension for smoothing
+        print('Using the statsmodels module: http://www.statsmodels.org/stable/index.html')
+        print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
+        for i in range(0,len(self.model_name_list)):
+             print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
 
 
     def set_number_of_forecast_samples(self,number_of_forecast_samples):
@@ -133,18 +205,146 @@ class foxi:
         self.fontsize = fontsize
 
 
-    def analyse_foxiplot_line(self,line_1):
+    def analyse_foxiplot_line(self,line_1,as_a_function=False):
     # Reads first line from a foxiplot data file and outputs the number of models and dimension of data (this is just to check the input)
         dim_data = int(line_1[0])
         num_models = int(line_1[1])
         self.mix_models_was_used = int(line_1[2])
         
-        if self.mix_models_was_used == False: 
-            print("Just read in an ordinary foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
-        if self.mix_models_was_used == True:
-            print("Just read in a `mix_models' foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
+        if as_a_function == False:
+            if self.mix_models_was_used == False: 
+                print("Just read in an ordinary foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
+            if self.mix_models_was_used == True:
+                print("Just read in a `mix_models' foxiplot data file with data dimension " + str(dim_data) + " and the number of model pairs is " + str(num_models))
 
         return [dim_data,num_models]
+
+
+    def FPS_derivative(self,order,stepsize,f_lower2,f_lower1,f_centre,f_upper1,f_upper2):
+    # Numerically evaluates the (first or second) derivative in a Five Point Stencil (FPS) using the coefficients provided by: http://web.media.mit.edu/~crtaylor/calculator.html
+        if order == 1: return (f_lower2 - (8.0*f_lower1) + (8.0*f_upper1) - f_upper2)/(12.0*stepsize)
+        if order == 2: return (-f_lower2 + (16.0*f_lower1) - (30.0*f_centre) + (16.0*f_upper1) - f_upper2)/(12.0*(stepsize**2.0))
+
+
+    def analytic_estimates(self,toy_model_space,chains_best_fit_point,chains_fisher_matrix,stepsizes):
+    # Additional function which estimates (using the Fisher matrix function introduced with 'set_fisher_matrix') and outputs the expected 
+    # Kullback-Liebler divergence and total sum over expected log-Bayes factors in the model space specified by the user at input... 
+    # Run this separately from the main foxi algorithm, and note that it takes far less time to complete so can be a useful
+    # check on the accuracy of foxi computations
+        
+        '''
+        Inputs:
+
+
+        toy_model_space                =    User-specified model space - a collection of points with coordinates given in a list [[dim1,dim2,..],[dim1,dim2,..],...] which 
+                                            corresponds to a collection of models represented with dirac delta function priors. This is useful to get an approximate picture
+                                            of how a deformation to the space of models can change the expected ln Bayes factor utility
+
+
+        chains_best_fit_point          =    User-specified point in a list [dim1, dim2, ...] representing the best fit value from the data chains
+
+
+        chains_fisher_matrix           =    User-specified square matrix given in list form [[dim1,dim2,..],[dim1,dim2,..],...] representing the approximate Fisher matrix
+                                            of the current posterior. This should be readily obtained from a decent MCMC algorithm from which the chains were obtained
+
+        
+        stepsizes                      =    A list of stepsizes in each dimension with which to numerically evaluate the derivative of the forecast Fisher matrix
+
+
+        '''
+
+        toy_model_space = np.asarray(toy_model_space) 
+        chains_best_fit_point = np.asarray(chains_best_fit_point)
+        chains_fisher_matrix = np.asarray(chains_fisher_matrix)
+        # Convert to arrays for quicker computation
+
+        dimension_number = len(chains_fisher_matrix)
+        # Find the number of dimensions
+
+        forecast_fisher_centre = self.fisher_matrix_function(chains_best_fit_point)  
+        # Calculate the Fisher matrix forecast at the best fit point of the chains       
+
+        forecast_fisher_first_derivs = []
+        forecast_fisher_first_derivs_function_values = []
+        forecast_fisher_second_derivs = []
+        forecast_fisher_cross_second_derivs = [[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)]
+        # Initialise lists of derivatives
+        
+        stepsizes_list = []
+        for i in range(0,dimension_number):
+            stepsize_vector = np.zeros(dimension_number)
+            stepsize_vector[i] = stepsizes[i]
+            stepsizes_list.append(stepsize_vector)
+        # Create list of stepsize vectors for quick addition
+
+        for i in range(0,dimension_number):
+            f_lower2 = self.fisher_matrix_function(chains_best_fit_point-(2.0*stepsizes_list[i])) 
+            f_lower1 = self.fisher_matrix_function(chains_best_fit_point-(1.0*stepsizes_list[i]))
+            f_upper1 = self.fisher_matrix_function(chains_best_fit_point+(1.0*stepsizes_list[i]))
+            f_upper2 = self.fisher_matrix_function(chains_best_fit_point+(2.0*stepsizes_list[i]))
+            # Loop over the number of dimensions and compute the forecast Fisher matrices of the stencil
+
+            forecast_fisher_first_derivs_function_values.append([f_lower2,f_lower1,f_upper1,f_upper2])
+            # Store the values in order to calculate the cross-derivatives later 
+
+            forecast_fisher_first_derivs.append(self.FPS_derivative(1,stepsizes[i],f_lower2,f_lower1,forecast_fisher_centre,f_upper1,f_upper2))
+            forecast_fisher_second_derivs.append(self.FPS_derivative(2,stepsizes[i],f_lower2,f_lower1,forecast_fisher_centre,f_upper1,f_upper2)) 
+            # Set the value of the first and second derivative matrices - the latter corresponding to the D_iD_i derivative           
+
+        for i in range(0,dimension_number):
+            for j in range(i+1,dimension_number):  
+            # Use a scheme that recomputes the minimum number of components for the cross-derivatives
+                f_lower_lower = self.fisher_matrix_function(chains_best_fit_point-stepsizes_list[i]-stepsizes_list[j]) 
+                f_upper_upper = self.fisher_matrix_function(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j])
+                cross_derivative = (f_upper_upper+(2.0*forecast_fisher_centre)+f_lower_lower-forecast_fisher_first_derivs_function_values[i][1]-forecast_fisher_first_derivs_function_values[i][2]-forecast_fisher_first_derivs_function_values[j][1]-forecast_fisher_first_derivs_function_values[j][2])/(2.0*stepsizes[i]*stepsizes[j]) 
+                forecast_fisher_cross_second_derivs[i][j] = cross_derivative 
+                forecast_fisher_cross_second_derivs[j][i] = cross_derivative  
+                # Add in the off-diagonal components of the derivative matrix                 
+
+        for i in range(0,dimension_number): forecast_fisher_cross_second_derivs[i][i] = forecast_fisher_second_derivs[i]
+        # Add in the diagonal component of the derivative matrix
+
+        DKL_centre = 0.5*(np.log(np.linalg.det(np.linalg.inv(chains_fisher_matrix)*(chains_fisher_matrix+forecast_fisher_centre))) - dimension_number + np.trace(chains_fisher_matrix*np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre))) 
+        SUMexlnB_centre = 0.0
+        exlnB_centre = [0.0 for npairs in range(0,len(toy_model_space)*(len(toy_model_space)-1)/2)]
+        add_on = 0
+        for na in range(0,len(toy_model_space)): 
+            for nb in range(na+1,len(toy_model_space)):
+                lnB_centre = np.abs(0.5*(np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
+                SUMexlnB_centre += lnB_centre
+                exlnB_centre[nb-na-1+add_on] = lnB_centre
+            add_on += len(toy_model_space)-na-1
+        # Evaluate the utilities at the central values - this includes summing over the expected Bayes factors all possible model pairs specified in the toy model space
+
+        exDKLest = DKL_centre 
+        SUMexlnBest = SUMexlnB_centre
+        exlnBest = [exlnB_centre[npairs] for npairs in range(0,len(exlnB_centre))]
+        # Initialise sums for the estimated expected utilities with their central values
+
+        for i in range(0,dimension_number):
+            for j in range(0,dimension_number):
+            # Compute the expected utilty estimates with the fisher matrices
+                traceterm = np.trace((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_cross_second_derivs[i][j]) - ((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) +((2.0*chains_fisher_matrix)*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**3.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])) + (np.linalg.inv(chains_fisher_matrix)*(np.linalg.inv(np.linalg.inv(chains_fisher_matrix)+ np.linalg.inv(forecast_fisher_centre))**2.0))[i][j]
+                exDKLest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*traceterm
+                # Compute the estimated expected Kullback-Liebler divergence ij-component and then add it to the total contribution
+
+                SUMexlnBestij = 0.0
+                add_on = 0
+                for na in range(0,len(toy_model_space)): 
+                    for nb in range(na+1,len(toy_model_space)):
+                        lnBestij = np.abs((4.0*np.dot(forecast_fisher_first_derivs[i],(toy_model_space[na]-toy_model_space[nb])))[j]+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[nb]-chains_best_fit_point)))-np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[na]-chains_best_fit_point))))
+                # Compute the estimated expected ln Bayes factor averaged over the whole model space ij-component and then add it to the total contribution
+                        exlnBest[nb-na-1+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i,j]*lnBestij
+                        SUMexlnBestij += lnBestij
+                    add_on += len(toy_model_space)-na-1
+                
+                SUMexlnBest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*SUMexlnBestij
+                # Add this ij-contribution to the total   
+
+        print('<DKL> estimate: ' + str(exDKLest)) 
+        print('Sum_i <|lnB|>_i estimate: ' + str(SUMexlnBest)) 
+        for npairs in range(0,len(exlnBest)): print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest[npairs]))
+        # Return the results in terminal output form
 
 
     def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,model_index):
@@ -313,9 +513,9 @@ class foxi:
         running_total = 0 # Initialize a running total of points read in from the chains
 
         forecast_data_function_normalisation = np.sum(np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector))
-        # Compute the normalisation for the dkl value
+        # Compute the future posterior normalisation for the dkl value
 
-        logargument = np.asarray(float(number_of_points)*np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector)/forecast_data_function_normalisation)
+        logargument = np.sum(np.asarray(self.chains_weights))*np.asarray(forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector)/forecast_data_function_normalisation)
 
         dkl = np.asarray((np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,error_vector)/forecast_data_function_normalisation)*np.log(logargument))
         dkl[np.isnan(dkl)] = 0.0
@@ -369,12 +569,12 @@ class foxi:
                     # Update the number of maxed evidences for this model
 
                     if E[0] == 0.0:
-                        abslnB[j] = 0.0
+                        abslnB[j] = 0.0 
                     else:
                         abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
                 if E[0] == 0.0:
                     if E[j] == 0.0:
-                        abslnB[j] = 0.0
+                        abslnB[j] = 0.0 
                     else:
                         abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
                 else:
@@ -527,9 +727,9 @@ class foxi:
         running_total = 0 # Initialize a running total of points read in from the chains
 
         forecast_data_function_normalisation = np.sum(np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,fisher_matrix))
-        # Compute the normalisation for the dkl value
+        # Compute the future posterior normalisation for the dkl value
 
-        logargument = np.asarray(float(number_of_points)*np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,fisher_matrix)/forecast_data_function_normalisation)
+        logargument = np.sum(np.asarray(self.chains_weights))*np.asarray(forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,fisher_matrix)/forecast_data_function_normalisation)
 
         dkl = np.asarray((np.asarray(self.chains_weights)*forecast_data_function(np.asarray(self.chains_data),fiducial_point_vector,fisher_matrix)/forecast_data_function_normalisation)*np.log(logargument))
         dkl[np.isnan(dkl)] = 0.0
@@ -583,7 +783,7 @@ class foxi:
                     # Update the number of maxed evidences for this model
 
                     if E[0] == 0.0:
-                        abslnB[j] = 0.0
+                        abslnB[j] = 0.0 
                     else:
                         abslnB[j] = 1000.0 # Maximal permitted value for an individual sample
                 if E[0] == 0.0:
@@ -617,7 +817,7 @@ class foxi:
                             abslnB[count_elements] = 1000.0 # Maximal permitted value for an individual sample
                     if E[k] == 0.0:
                         if E[j] == 0.0:
-                            abslnB[count_elements] = 0.0
+                            abslnB[count_elements] = 0.0 
                         else:
                             abslnB[count_elements] = 1000.0 # Maximal permitted value for an individual sample
                     else:
@@ -638,26 +838,10 @@ class foxi:
         # point in the case of each model pair - this is used in the Maximum Likelihood average procedure in rerun_foxi
 
 
-    def run_foxi(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,error_vector,mix_models=False): 
+    def run_foxi(self,error_vector,mix_models=False): 
     # This is the main algorithm to compute the utilites and compute other quantities then output them to a file
         ''' 
-        Quick usage and settings:
-                 
-
-        chains_column_numbers      =  A list of the numbers of the columns in the chains that correspond to
-                                      the parameters of interest, starting with 0. These should be in the same
-                                      order as all other structures
-
-
-        prior_column_numbers       =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
-                                      correspond to the parameters of interest, starting with 0. These should 
-                                      be in the same order as all other structures   
-
-
-        number_of_points           =  The number of points specified to be read off from the current data chains
-
-
-        number_of_prior_points     =  The number of points specified to be read off from the prior
+        Quick usage and settings:  
 
 
         error_vector               =  Fixed predicted future measurement errors corresponding to the fiducial_point_vector   
@@ -683,7 +867,7 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
-            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(len(self.model_name_list)) + "\t" + str(0) + "\n")
+            plot_data_file.write(str(len(self.chains_column_numbers)) + "\t" + str(len(self.model_name_list)) + "\t" + str(0) + "\n")
             # Initialize output file
 
         if mix_models == True:
@@ -695,78 +879,14 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the possible number of distinct model pairs 
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
-            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(possible_model_pairs) + "\t" + str(1) + "\n")
+            plot_data_file.write(str(len(self.chains_column_numbers)) + "\t" + str(possible_model_pairs) + "\t" + str(1) + "\n")
             # Initialize output file in the case where all possible model combinations are tried within each utility
-
-        self.density_functions = []
-        # Initialise an empty list of density functions that may or may not be used
-
-        for i in range(0,len(self.model_name_list)):  
-         
-            running_total = 0 # Initialize a running total of points read in from each prior      
-
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                for line in file:
-                    columns = line.split()
-                    columns = np.asarray(columns).astype(np.float)
-
-                    if self.prior_column_types_are_set == True: 
-                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
-                    else: 
-                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
-                    
-                    self.prior_data[i].append(np.asarray(prior_point_vector)) # Store the data for the KDE
-                                      
-                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                    running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
-
-            c_string = ''
-            for j in range(0,len(prior_column_numbers[i])): c_string += 'c'
-            # Silly notational detail to get the kde to work for continuous variables in all dimensions    
-
-            self.density_functions.append(kde(self.prior_data[i],var_type=c_string)) # Append a new Density Estimation function to the list for use later
-            # Kernel Density Estimation uses statsmodels.nonparametric toolkit to estimate the 
-            # density locally at the fiducial point itself, ensuring that there are no lost points
-            # within each prior volume 'hull'
-
-        
-        # When using KDE method we quote the bandwidths used for each dimension for smoothing
-        print('Using the statsmodels module: http://www.statsmodels.org/stable/index.html')
-        print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
-        for i in range(0,len(self.model_name_list)):
-             print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
-
-        running_total = 0 # Re-initialize a running total of points read in from the chains
-
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Loop dynamically with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                columns = np.asarray(columns).astype(np.float)              
-
-                if self.chains_weights_are_set == True: 
-                    self.chains_weights.append(columns[self.current_data_chains_weights_column])
-                else:
-                    self.chains_weights.append(1.0)
-                # Set the chain weights either to the alloted column or to the default of 1.0 at each point
-
-                if self.column_types_are_set == True: 
-                    fiducial_point_vector = self.column_functions(np.asarray(columns[chains_column_numbers]))
-                else: 
-                    fiducial_point_vector = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
-
-                self.chains_data.append(fiducial_point_vector)
-
-                running_total+=1 # Also add to the running total
-                if running_total >= number_of_points: break # Finish once reached specified number of data points
 
 
         for j in range(0,len(self.chains_data)):
         # Compute utilities with stored chains 
         
-            [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(self.chains_data[j],chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,error_vector,mix_models=mix_models)
+            [abslnB,deci,DKL,lnE,valid_ML] = self.utility_functions(self.chains_data[j],self.chains_column_numbers,self.prior_column_numbers,forecast_data_function,self.number_of_points,self.number_of_prior_points,error_vector,mix_models=mix_models)
                 
             plot_data_file.write(str(self.chains_weights[j]) + "\t" + "\t".join(map(str, np.asarray(self.chains_data[j]))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(abslnB))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(lnE))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(valid_ML))) +  "\t"  +  str(j)  +  "\t"  +  str(DKL) + "\n") 
                 # Output fiducial point values etc... and other data to file if requested  
@@ -789,26 +909,10 @@ class foxi:
             # Print out the number of maxed-out evidences for each model at the end of the computation
 
     
-    def run_foxifish(self,chains_column_numbers,prior_column_numbers,number_of_points,number_of_prior_points,mix_models=False): 
+    def run_foxifish(self,mix_models=False): 
     # This is the main algorithm which now includes a specified Fisher matrix
         ''' 
         Quick usage and settings:
-                 
-
-        chains_column_numbers      =  A list of the numbers of the columns in the chains that correspond to
-                                      the parameters of interest, starting with 0. These should be in the same
-                                      order as all other structures
-
-
-        prior_column_numbers       =  A 2D list [i][j] of the numbers of the columns j in the prior for model i that 
-                                      correspond to the parameters of interest, starting with 0. These should 
-                                      be in the same order as all other structures   
-
-
-        number_of_points           =  The number of points specified to be read off from the current data chains
-
-
-        number_of_prior_points     =  The number of points specified to be read off from the prior
 
 
         mix_models                 =  Boolean - True computes U in all combinations of model comparison i.e. {i not j} U(M_i-M_j)
@@ -831,7 +935,7 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the number of models (reference model is element 0)  
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data.txt",'w')
-            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(len(self.model_name_list)) + "\t" + str(0) + "\n")
+            plot_data_file.write(str(len(self.chains_column_numbers)) + "\t" + str(len(self.model_name_list)) + "\t" + str(0) + "\n")
             # Initialize output file
 
         if mix_models == True:
@@ -843,78 +947,14 @@ class foxi:
             # Initialize an array of values of the absolute log Bayes factor for the possible number of distinct model pairs 
 
             plot_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_mix_models.txt",'w')
-            plot_data_file.write(str(len(chains_column_numbers)) + "\t" + str(possible_model_pairs) + "\t" + str(1) + "\n")
+            plot_data_file.write(str(len(self.chains_column_numbers)) + "\t" + str(possible_model_pairs) + "\t" + str(1) + "\n")
             # Initialize output file in the case where all possible model combinations are tried within each utility
-
-        self.density_functions = []
-        # Initialise an empty list of density functions that may or may not be used
-
-        for i in range(0,len(self.model_name_list)):  
-         
-            running_total = 0 # Initialize a running total of points read in from each prior      
-
-            with open(self.path_to_foxi_directory + '/' + self.priors_directory + self.model_name_list[i]) as file:
-            # Compute quantities in loop dynamically as with open(..) reads off the prior values
-                for line in file:
-                    columns = line.split()
-                    columns = np.asarray(columns).astype(np.float)
-
-                    if self.prior_column_types_are_set == True: 
-                        prior_point_vector = self.column_functions(np.asarray(columns[prior_column_numbers[i]]),prior=True)
-                    else: 
-                        prior_point_vector = np.asarray(columns[prior_column_numbers[i]]) # All columns are as input unless this is True
-                    
-                    self.prior_data[i].append(np.asarray(prior_point_vector)) # Store the data for the KDE
-                                      
-                    # Calculate the forecast probability and therefore the contribution to the Bayesian evidence for each model
-                    running_total+=1 # Also add to the running total                         
-                    if running_total >= number_of_prior_points: break # Finish once reached specified number of prior points
-
-            c_string = ''
-            for j in range(0,len(prior_column_numbers[i])): c_string += 'c'
-            # Silly notational detail to get the kde to work for continuous variables in all dimensions    
-
-            self.density_functions.append(kde(self.prior_data[i],var_type=c_string)) # Append a new Density Estimation function to the list for use later
-            # Kernel Density Estimation uses statsmodels.nonparametric toolkit to estimate the 
-            # density locally at the fiducial point itself, ensuring that there are no lost points
-            # within each prior volume 'hull'
-
-        
-        # When using KDE method we quote the bandwidths used for each dimension for smoothing
-        print('Using the statsmodels module: http://www.statsmodels.org/stable/index.html')
-        print('The Kernel Density Bandwidth for each model listed in each dimension:' + '\n')
-        for i in range(0,len(self.model_name_list)):
-             print('Model ' + str(i) + ': ' + str(self.density_functions[i].bw))
-
-        running_total = 0 # Re-initialize a running total of points read in from the chains
-
-        with open(self.path_to_foxi_directory + '/' + self.chains_directory + self.current_data_chains) as file:
-        # Loop dynamically with open(..) reads off the chains
-            for line in file:
-                columns = line.split()
-                columns = np.asarray(columns).astype(np.float)   
-
-                if self.chains_weights_are_set == True: 
-                    self.chains_weights.append(columns[self.current_data_chains_weights_column])
-                else:
-                    self.chains_weights.append(1.0)
-                # Set the chain weights either to the alloted column or to the default of 1.0 at each point           
-
-                if self.column_types_are_set == True: 
-                    fiducial_point_vector = self.column_functions(np.asarray(columns[chains_column_numbers]))
-                else: 
-                    fiducial_point_vector = np.asarray(columns[chains_column_numbers]) # All columns are flat formats unless this is True
-
-                self.chains_data.append(fiducial_point_vector)
-
-                running_total+=1 # Also add to the running total
-                if running_total >= number_of_points: break # Finish once reached specified number of data points
 
 
         for j in range(0,len(self.chains_data)):
         # Compute utilities with stored chains 
         
-            [abslnB,deci,DKL,lnE,valid_ML] = self.fisher_utility_functions(self.chains_data[j],chains_column_numbers,prior_column_numbers,forecast_data_function,number_of_points,number_of_prior_points,self.fisher_matrix_function(self.chains_data[j]),mix_models=mix_models)
+            [abslnB,deci,DKL,lnE,valid_ML] = self.fisher_utility_functions(self.chains_data[j],self.chains_column_numbers,self.prior_column_numbers,forecast_data_function,self.number_of_points,self.number_of_prior_points,self.fisher_matrix_function(self.chains_data[j]),mix_models=mix_models)
                 
             plot_data_file.write(str(self.chains_weights[j]) + "\t" + "\t".join(map(str, np.asarray(self.chains_data[j]))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(abslnB))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(lnE))) +  "\t"  +  str(j)  +  "\t"  +  "\t".join(map(str, np.asarray(valid_ML))) +  "\t"  +  str(j)  +  "\t"  +  str(DKL) + "\n") 
                 # Output fiducial point values etc... and other data to file if requested  
@@ -937,7 +977,7 @@ class foxi:
             # Print out the number of maxed-out evidences for each model at the end of the computation
 
 
-    def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False,model_name_TeX_input=[]): 
+    def rerun_foxi(self,foxiplot_samples,number_of_foxiplot_samples,predictive_prior_types,TeX_output=False,model_name_TeX_input=[],as_a_function=False): 
     # This function takes in the foxiplot data file to compute secondary quantities like the centred second-moment of the utilities 
     # and also the utilities using Maximum Likelihood averageing are computed. This two-step sequence is intended to simplify computing
     # on a cluster
@@ -960,13 +1000,14 @@ class foxi:
 
         
         model_name_TeX_input           =  An empty list which may be populated with model names written in TeX for the table
- 
+
+        
+        as_a_function                  =  Boolean - True Converts 'rerun_foxi' into a function which returns the entire output as a nested list                                                   
 
 
         '''
 
-
-        self.flashy_foxi() # Display propaganda      
+        if as_a_function == False: self.flashy_foxi() # Display propaganda      
 
         running_total = 0 # Initialize a running total of points read in from the foxiplot data file
         
@@ -983,7 +1024,7 @@ class foxi:
                 if running_total == 1: break # Finish once reached specified number of data points 
         # Read off lines to be used to analyse the foxiplot data file for correct reading
         
-        [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_line(line_for_analysis_1)
+        [number_of_fiducial_point_dimensions,number_of_models] = self.analyse_foxiplot_line(line_for_analysis_1,as_a_function=as_a_function)
         # Read in lines, analyse and output useful information for reading the data file or return error
 
         predictive_prior_weight_total = 0.0
@@ -1124,19 +1165,21 @@ class foxi:
                 if running_total >= number_of_foxiplot_samples: break # Finish once reached specified number of data points 
         # Computed the second-moment utilities in the above loop
 
-        # Normalise outputs and avoid NAN values + infinite values
-        output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_summary.txt",'w')
-        output_data_file.write(' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_abslnB) + "\n")
-        output_data_file.write(' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
-        output_data_file.write('<DKL> = ' + str(expected_DKL) + "\n")
-        output_data_file.write(' [<|lnB|_ML>_1, <|lnB|_ML>_2, ...] = ' + str(expected_abslnB_ML) + "\n") 
-        output_data_file.write(' [r_ML|_1, r_ML|_2, ...] = ' + str(proportion_of_ML_failures) + "\n")
-        output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
-        output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1_ML)^2 >_ML, < (|lnB|_2 - <|lnB|>_2_ML)^2 >_ML, ...] = ' + str(som_abslnB_ML) + "\n")
-        output_data_file.write(' [DECI_1|_ML, DECI_2|_ML, ...] = ' + str(decisivity_ML) + "\n")
-        output_data_file.write('< (DKL-<DKL>)^2 > = ' + str(som_DKL))
-        output_data_file.close()
-        # Output data to `foxiplots_data_summary.txt'
+        if as_a_function == False:
+            output_data_file = open(self.path_to_foxi_directory + "/" + self.output_directory + "foxiplots_data_summary.txt",'w')
+            output_data_file.write(' [<|lnB|>_1, <|lnB|>_2, ...] = ' + str(expected_abslnB) + "\n")
+            output_data_file.write(' [DECI_1, DECI_2, ...] = ' + str(decisivity) + "\n")
+            output_data_file.write('<DKL> = ' + str(expected_DKL) + "\n")
+            output_data_file.write(' [<|lnB|_ML>_1, <|lnB|_ML>_2, ...] = ' + str(expected_abslnB_ML) + "\n") 
+            output_data_file.write(' [r_ML|_1, r_ML|_2, ...] = ' + str(proportion_of_ML_failures) + "\n")
+            output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1)^2 >, < (|lnB|_2 - <|lnB|>_2)^2 >, ...] = ' + str(som_abslnB) + "\n")
+            output_data_file.write(' [< (|lnB|_1 - <|lnB|>_1_ML)^2 >_ML, < (|lnB|_2 - <|lnB|>_2_ML)^2 >_ML, ...] = ' + str(som_abslnB_ML) + "\n")
+            output_data_file.write(' [DECI_1|_ML, DECI_2|_ML, ...] = ' + str(decisivity_ML) + "\n")
+            output_data_file.write('< (DKL-<DKL>)^2 > = ' + str(som_DKL))
+            output_data_file.close()
+            # Output data to `foxiplots_data_summary.txt'
+        else:
+            return [expected_abslnB,decisivity,expected_DKL,expected_abslnB_ML,proportion_of_ML_failures,som_abslnB,som_abslnB_ML,decisivity_ML,som_DKL]
 
         if TeX_output == True:
         # Output a TeX table!
@@ -1248,7 +1291,7 @@ class foxi:
 
 
     def plot_foxiplots(self,filename_choice,column_numbers,ranges,number_of_bins,number_of_samples,label_values,corner_plot=False):
-    # Plot data from files using either corner or 2D histogram and output to the directory foxioutput/
+    # Plot data from files using either corner or 2D histogram and output to the directory foxiplots/
         ''' 
         Quick usage and settings:
                  
@@ -1353,6 +1396,78 @@ class foxi:
         # Use corner to plot the samples 
 
             figure.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
+        # Saving output to foxiplots/
+
+
+    def plot_convergence(self,filename_choice,number_of_bins,total_number_of_samples,predictive_prior_types):
+    # Make convergence plots of all utilities in a 'foxiplots_data' or 'foxiplots_data_mix_models' file and output to the directory foxiplots/
+        ''' 
+        Quick usage and settings:
+                 
+        
+        filename_choice            =  Input the name of the file in foxioutput/ whose convergence plots are to be made  
+
+
+        number_of_bins             =  Integer input for the number of bins for all axes
+
+
+        predictive_prior_types     =  Takes a string as input, the choices are: 'flat' or 'log' - note that changing between 
+                                      these can cause issues numerically if there are not enough points
+
+
+        total_number_of_samples    =  Give the convergence plot up to a specified total number of samples
+
+
+
+        '''
+
+        tot_expected_abslnB = []
+        tot_decisivity = []
+        tot_expected_DKL = []
+        tot_expected_abslnB_ML = []
+        tot_proportion_of_ML_failures = []
+        tot_decisivity_ML = []
+        tot_number_of_samples = []
+        # Initialise empty lists for plot values
+
+        for ns in range(1,number_of_bins):
+        # Count through the number of bins to re-evaluate the utilities
+            number_of_samples_to_plot = int(float(ns)*(float(total_number_of_samples)/float(number_of_bins)))
+            # Compute an integer number of samples to compute the utilities with each time
+
+            [expected_abslnB,decisivity,expected_DKL,expected_abslnB_ML,proportion_of_ML_failures,som_abslnB,som_abslnB_ML,decisivity_ML,som_DKL] = self.rerun_foxi(filename_choice,number_of_samples_to_plot,predictive_prior_types,as_a_function=True)
+            # Evaluate utilities each time using 'rerun_foxi'
+            
+            tot_number_of_samples.append(number_of_samples_to_plot)
+            tot_expected_abslnB.append(expected_abslnB)
+            tot_decisivity.append(decisivity)
+            tot_expected_DKL.append(expected_DKL)
+            tot_expected_abslnB_ML.append(expected_abslnB_ML)
+            tot_proportion_of_ML_failures.append(proportion_of_ML_failures)
+            tot_decisivity_ML.append(decisivity_ML)
+            # Add to each point in the total list
+            
+        fig,axes = plt.subplots(nrows=2,ncols=3,figsize=(6,6))
+        # Create multi-tier plot of utilties   
+
+        axes[0,0].plot(tot_number_of_samples,tot_expected_DKL)
+        axes[0,0].set_title(r'$\langle D_{\rm KL}\rangle$', fontsize=self.fontsize)
+
+        for nm in range(0,len(np.asarray(tot_expected_abslnB).T)):
+        # Loop over the number of models to make each plot line
+            axes[0,1].plot(tot_number_of_samples,np.asarray(tot_expected_abslnB).T[nm])
+            axes[0,1].set_title(r'$\langle \vert \ln {\rm B}_{\beta \gamma}\vert \rangle$', fontsize=self.fontsize)
+            axes[1,1].plot(tot_number_of_samples,np.asarray(tot_decisivity).T[nm])
+            axes[1,1].set_title(r'$\mathscr{D}_{\beta \gamma}$', fontsize=self.fontsize)
+            axes[0,2].plot(tot_number_of_samples,np.asarray(tot_expected_abslnB_ML).T[nm])
+            axes[0,2].set_title(r'$\langle \vert \ln {\rm B}_{\beta \gamma} \vert \rangle_{{}_{\rm ML}}$', fontsize=self.fontsize)
+            axes[1,2].plot(tot_number_of_samples,np.asarray(tot_decisivity_ML).T[nm])   
+            axes[1,2].set_title(r'$\mathscr{D}_{\beta \gamma}\vert_{{}_{\rm ML}}$', fontsize=self.fontsize) 
+            axes[1,0].plot(tot_number_of_samples,np.asarray(tot_proportion_of_ML_failures).T[nm])
+            axes[1,0].set_title(r'$r_{{}_\mathrm{ML}}$', fontsize=self.fontsize)
+
+        fig.subplots_adjust(hspace=0.4,wspace=0.4)
+        fig.savefig(self.path_to_foxi_directory + "/" + self.plots_directory + "foxiplot_convergence.pdf", format='pdf',bbox_inches='tight',pad_inches=0.1,dpi=300)
         # Saving output to foxiplots/
 
 

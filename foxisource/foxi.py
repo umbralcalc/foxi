@@ -306,44 +306,60 @@ class foxi:
 
         DKL_centre = 0.5*(np.log(np.linalg.det(np.linalg.inv(chains_fisher_matrix)*(chains_fisher_matrix+forecast_fisher_centre))) - dimension_number + np.trace(chains_fisher_matrix*np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre))) 
         SUMexlnB_centre = 0.0
-        exlnB_centre = [0.0 for npairs in range(0,len(toy_model_space)*(len(toy_model_space)-1)/2)]
+        exlnB_centre = [0.0 for npairs in range(0,len(toy_model_space)*(len(toy_model_space)-1)/2 + len(toy_model_space))]
         add_on = 0
         for na in range(0,len(toy_model_space)): 
-            for nb in range(na+1,len(toy_model_space)):
+            for nb in range(na,len(toy_model_space)):
                 lnB_centre = np.abs(0.5*(np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
                 SUMexlnB_centre += lnB_centre
-                exlnB_centre[nb-na-1+add_on] = lnB_centre
-            add_on += len(toy_model_space)-na-1
+                exlnB_centre[nb-na+add_on] = lnB_centre
+            add_on += len(toy_model_space)-na
         # Evaluate the utilities at the central values - this includes summing over the expected Bayes factors all possible model pairs specified in the toy model space
 
         exDKLest = DKL_centre 
         SUMexlnBest = SUMexlnB_centre
+        exDKLest_som = 0.0 
+        SUMexlnBest_som = 0.0
         exlnBest = [exlnB_centre[npairs] for npairs in range(0,len(exlnB_centre))]
-        # Initialise sums for the estimated expected utilities with their central values
+        exlnBest_som = [0.0 for npairs in range(0,len(exlnB_centre))]
+        # Initialise sums for the estimated expected utilities with their central values and the second centred-moments (som) to zero
 
         for i in range(0,dimension_number):
             for j in range(0,dimension_number):
             # Compute the expected utilty estimates with the fisher matrices
+            # As above, this is a super-slow method of looping - more efficient to use tensor contractions in python but 
+            # will leave this to a later update in the case where the number of dimensions is very large
                 traceterm = np.trace((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_cross_second_derivs[i][j]) - ((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) +((2.0*chains_fisher_matrix)*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**3.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])) + (np.linalg.inv(chains_fisher_matrix)*(np.linalg.inv(np.linalg.inv(chains_fisher_matrix)+ np.linalg.inv(forecast_fisher_centre))**2.0))[i][j]
+                traceterm_som = np.trace(((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_first_derivs[i]) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i])))*np.trace(((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_first_derivs[j]) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j])))
                 exDKLest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*traceterm
+                exDKLest_som += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*traceterm_som
                 # Compute the estimated expected Kullback-Liebler divergence ij-component and then add it to the total contribution
 
                 SUMexlnBestij = 0.0
+                SUMexlnBestij_som = 0.0
                 add_on = 0
                 for na in range(0,len(toy_model_space)): 
-                    for nb in range(na+1,len(toy_model_space)):
+                    for nb in range(na,len(toy_model_space)):
                         lnBestij = np.abs((4.0*np.dot(forecast_fisher_first_derivs[i],(toy_model_space[na]-toy_model_space[nb])))[j]+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[nb]-chains_best_fit_point)))-np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[na]-chains_best_fit_point))))
-                # Compute the estimated expected ln Bayes factor averaged over the whole model space ij-component and then add it to the total contribution
-                        exlnBest[nb-na-1+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i,j]*lnBestij
+                        lnBestij_som = np.abs(((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[i])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point))))*((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[j])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)))))    
+                # Compute the estimated expected ln Bayes factor (and its second moment contribution) averaged over the whole model space ij-component and then add it to the total contribution
+                        exlnBest[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij
+                        exlnBest_som[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij_som
                         SUMexlnBestij += lnBestij
-                    add_on += len(toy_model_space)-na-1
+                        SUMexlnBestij_som += lnBestij_som
+                    add_on += len(toy_model_space)-na
                 
                 SUMexlnBest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*SUMexlnBestij
+                SUMexlnBest_som += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*SUMexlnBestij_som
                 # Add this ij-contribution to the total   
 
-        print('<DKL> estimate: ' + str(exDKLest)) 
-        print('Sum_i <|lnB|>_i estimate: ' + str(SUMexlnBest)) 
-        for npairs in range(0,len(exlnBest)): print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest[npairs]))
+        print('<DKL> estimate: ' + str(exDKLest) + ' + O(F^{-2}) terms') 
+        print('< (DKL-<DKL>)^2 > estimate: ' + str(exDKLest_som) + ' + O(F^{-2}) terms') 
+        print('Sum_i <|lnB|>_i estimate: ' + str(SUMexlnBest) + ' + O(F^{-2}) terms') 
+        print('Sum_i < (|lnB|_i - <|lnB|>_i)^2 > estimate: ' + str(SUMexlnBest_som) + ' + O(F^{-2}) terms')
+        for npairs in range(0,len(exlnBest)):
+            print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest[npairs]) + ' + O(F^{-2}) terms')
+            print('< (|lnB|_' + str(npairs) + ' - <|lnB|>_' + str(npairs) + ')^2 >' + ' estimate: ' + str(exlnBest_som[npairs]) + ' + O(F^{-2}) terms')
         # Return the results in terminal output form
 
 

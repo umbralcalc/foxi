@@ -226,7 +226,7 @@ class foxi:
         if order == 2: return (-f_lower2 + (16.0*f_lower1) - (30.0*f_centre) + (16.0*f_upper1) - f_upper2)/(12.0*(stepsize**2.0))
 
 
-    def analytic_estimates(self,toy_model_space,chains_best_fit_point,chains_fisher_matrix,stepsizes):
+    def analytic_estimates(self,toy_model_space,chains_best_fit_point,chains_fisher_matrix,stepsizes,toy_model_space_matrices=None,as_a_function=False):
     # Additional function which estimates (using the Fisher matrix function introduced with 'set_fisher_matrix') and outputs the expected 
     # Kullback-Liebler divergence and total sum over expected log-Bayes factors in the model space specified by the user at input... 
     # Run this separately from the main foxi algorithm, and note that it takes far less time to complete so can be a useful
@@ -249,6 +249,16 @@ class foxi:
 
         
         stepsizes                      =    A list of stepsizes in each dimension with which to numerically evaluate the derivative of the forecast Fisher matrix
+
+
+        toy_model_space_matrices       =    If desired, one can specify a peakedness matrix for each toy model in a list and the model selection forecasts will use a Gaussian
+                                            for each model prior. Default is 'None' - a delta function prior for each model.       
+
+
+        as_a_function                  =    Boolean - True converts 'analytic_estimates' into a function which returns the following list of expected utility estimates: 
+                                                      [<DKL>, < (DKL-<DKL>)^2 >, Sum_i <|lnB|>_i, Sum_i < (|lnB|_i - <|lnB|>_i)^2 >, [<|lnB|>_1,..., <|lnB|>_n], 
+                                                      [< (|lnB|_1 - <|lnB|>_1)^2 >,..., < (|lnB|_n - <|lnB|>_n)^2 >]] 
+                                                    - False avoids doing this      
 
 
         '''
@@ -310,7 +320,10 @@ class foxi:
         add_on = 0
         for na in range(0,len(toy_model_space)): 
             for nb in range(na,len(toy_model_space)):
-                lnB_centre = np.abs(0.5*(np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
+                if toy_model_space_matrices:
+                    lnB_centre = np.abs(0.5*(np.log(np.linalg.det(np.identity(dimension_number)+(np.linalg.inv(toy_model_space_matrices[nb])*forecast_fisher_centre))/np.linalg.det(np.identity(dimension_number)+(np.linalg.inv(toy_model_space_matrices[na])*forecast_fisher_centre)))+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
+                else:
+                    lnB_centre = np.abs(0.5*(np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
                 SUMexlnB_centre += lnB_centre
                 exlnB_centre[nb-na+add_on] = lnB_centre
             add_on += len(toy_model_space)-na
@@ -340,8 +353,12 @@ class foxi:
                 add_on = 0
                 for na in range(0,len(toy_model_space)): 
                     for nb in range(na,len(toy_model_space)):
-                        lnBestij = np.abs((4.0*np.dot(forecast_fisher_first_derivs[i],(toy_model_space[na]-toy_model_space[nb])))[j]+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[nb]-chains_best_fit_point)))-np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[na]-chains_best_fit_point))))
-                        lnBestij_som = np.abs(((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[i])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point))))*((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[j])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)))))    
+                        if toy_model_space_matrices:
+                            lnBestij = np.abs(np.trace((((np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)**2.0)-(np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)**2.0))*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])+((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)))*forecast_fisher_cross_second_derivs[i][j]) + np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(((((np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])-(2.0*(np.linalg.inv(forecast_fisher_centre)**3.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])))*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0,toy_model_space[nb]-chains_best_fit_point)) - np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(((((np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])-(2.0*(np.linalg.inv(forecast_fisher_centre)**3.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])))*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0,toy_model_space[na]-chains_best_fit_point)) + np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(2.0*((np.linalg.inv(forecast_fisher_centre)**4.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**3.0,toy_model_space[nb]-chains_best_fit_point)) - np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(2.0*((np.linalg.inv(forecast_fisher_centre)**4.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**3.0,toy_model_space[na]-chains_best_fit_point)) + 4.0*np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)[i] - 4.0*np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)[i] + (2.0*((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)))-(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)))))[i][j])
+                            lnBestij_som = np.abs(((np.trace((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)*(forecast_fisher_first_derivs[i]))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)*(forecast_fisher_first_derivs[i]))))+2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[na]-chains_best_fit_point)[i]-2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[nb]-chains_best_fit_point)[i]+2.0*np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point))-2.0*np.dot(toy_model_space[na]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point)))*((np.trace((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)*(forecast_fisher_first_derivs[j]))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)*(forecast_fisher_first_derivs[j]))))+2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[na]-chains_best_fit_point)[j]-2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[nb]-chains_best_fit_point)[j]+2.0*np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point))-2.0*np.dot(toy_model_space[na]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point))))
+                        else:
+                            lnBestij = np.abs((4.0*np.dot(forecast_fisher_first_derivs[i],(toy_model_space[na]-toy_model_space[nb])))[j]+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[nb]-chains_best_fit_point)))-np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[na]-chains_best_fit_point))))
+                            lnBestij_som = np.abs(((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[i])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point))))*((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[j])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)))))    
                 # Compute the estimated expected ln Bayes factor (and its second moment contribution) averaged over the whole model space ij-component and then add it to the total contribution
                         exlnBest[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij
                         exlnBest_som[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij_som
@@ -361,6 +378,10 @@ class foxi:
             print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest[npairs]) + ' + O(F^{-2}) terms')
             print('< (|lnB|_' + str(npairs) + ' - <|lnB|>_' + str(npairs) + ')^2 >' + ' estimate: ' + str(exlnBest_som[npairs]) + ' + O(F^{-2}) terms')
         # Return the results in terminal output form
+
+        if as_a_function == True:
+            return [exDKLest,exDKLest_som,SUMexlnBest,SUMexlnBest_som,exlnBest,exlnBest_som] 
+            # If 'as_a_function' is True then output the results in a list             
 
 
     def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,model_index):

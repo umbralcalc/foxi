@@ -57,7 +57,8 @@ class foxi:
         self.exp_function
         self.power10_function
         self.analytic_estimates
-        self.FPS_derivative
+        self.DKL_analytic_utility_func
+        self.abslnB_analytic_utility_func
         self.dictionary_of_column_types = {'flat': self.flat_function, 'log': self.exp_function, 'log10': self.power10_function}    
 
 
@@ -220,11 +221,23 @@ class foxi:
         return [dim_data,num_models]
 
 
-    def FPS_derivative(self,order,stepsize,f_lower2,f_lower1,f_centre,f_upper1,f_upper2):
-    # Numerically evaluates the (first or second) derivative in a Five Point Stencil (FPS) using the coefficients provided by: http://web.media.mit.edu/~crtaylor/calculator.html
-        if order == 1: return (f_lower2 - (8.0*f_lower1) + (8.0*f_upper1) - f_upper2)/(12.0*stepsize)
-        if order == 2: return (-f_lower2 + (16.0*f_lower1) - (30.0*f_centre) + (16.0*f_upper1) - f_upper2)/(12.0*(stepsize**2.0))
+    def DKL_analytic_utility_func(self,chains_point,forecast_fisher,chains_fisher_matrix,chains_best_fit_point,dimension_number):
+    # Function with Gaussian approximation to the DKL utility
 
+        alpha = np.dot(np.linalg.inv(chains_fisher_matrix+forecast_fisher)*chains_fisher_matrix,chains_best_fit_point) + np.dot(np.linalg.inv(chains_fisher_matrix+forecast_fisher)*forecast_fisher,chains_point)
+        # This is like a 'centre-of-mass'
+
+        return 0.5*(np.log(np.linalg.det(np.linalg.inv(chains_fisher_matrix)*(chains_fisher_matrix+forecast_fisher))) + np.trace(chains_fisher_matrix*np.linalg.inv(chains_fisher_matrix+forecast_fisher)) + np.dot(chains_best_fit_point-alpha,np.dot(chains_fisher_matrix,chains_best_fit_point-alpha)) - float(dimension_number))
+
+    
+    def abslnB_analytic_utility_func(self,chains_point,forecast_fisher,model_1_point,model_2_point,model_matrices=None):
+    # Function with Gaussian approximation to the abslnB utility
+        if model_matrices:
+            return 0.5*np.abs(np.log(np.linalg.det(np.linalg.inv(model_matrices[1])*(model_matrices[1]+forecast_fisher))/np.linalg.det(np.linalg.inv(model_matrices[0])*(model_matrices[0]+forecast_fisher))) + np.dot(chains_point-model_2_point,np.dot(np.linalg.inv(np.linalg.inv(model_matrices[1])+np.linalg.inv(forecast_fisher)),chains_point-model_2_point))-np.dot(chains_point-model_1_point,np.dot(np.linalg.inv(np.linalg.inv(model_matrices[0])+np.linalg.inv(forecast_fisher)),chains_point-model_1_point)))
+        else:
+            return 0.5*np.abs(np.dot(chains_point-model_2_point,np.dot(forecast_fisher,chains_point-model_2_point))-np.dot(chains_point-model_1_point,np.dot(forecast_fisher,chains_point-model_1_point)))
+        # Output abslnB estimated using either a Gaussian for each model or a Dirac delta
+    
 
     def analytic_estimates(self,toy_model_space,chains_best_fit_point,chains_fisher_matrix,stepsizes,toy_model_space_matrices=None,as_a_function=False):
     # Additional function which estimates (using the Fisher matrix function introduced with 'set_fisher_matrix') and outputs the expected 
@@ -256,9 +269,8 @@ class foxi:
 
 
         as_a_function                  =    Boolean - True converts 'analytic_estimates' into a function which returns the following list of expected utility estimates: 
-                                                      [<DKL>, < (DKL-<DKL>)^2 >, Sum_i <|lnB|>_i, Sum_i < (|lnB|_i - <|lnB|>_i)^2 >, [<|lnB|>_1,..., <|lnB|>_n], 
-                                                      [< (|lnB|_1 - <|lnB|>_1)^2 >,..., < (|lnB|_n - <|lnB|>_n)^2 >]] 
-                                                    - False avoids doing this      
+                                                      [<DKL>, < (DKL-<DKL>)^2 >, [<|lnB|>_1,..., <|lnB|>_n], [< (|lnB|_1 - <|lnB|>_1)^2 >,..., < (|lnB|_n - <|lnB|>_n)^2 >]] 
+                                                    - False (default) avoids doing this      
 
 
         '''
@@ -271,14 +283,29 @@ class foxi:
         dimension_number = len(chains_fisher_matrix)
         # Find the number of dimensions
 
-        forecast_fisher_centre = self.fisher_matrix_function(chains_best_fit_point)  
-        # Calculate the Fisher matrix forecast at the best fit point of the chains       
+        forecast_fisher_centre = self.fisher_matrix_function(chains_best_fit_point)
+        DKL_centre = self.DKL_analytic_utility_func(chains_best_fit_point,forecast_fisher_centre,chains_fisher_matrix,chains_best_fit_point,dimension_number)   
+        exlnB_centre = [0.0 for npairs in range(0,len(toy_model_space)*(len(toy_model_space)-1)/2 + len(toy_model_space))]
+        # Initialise the central values  
 
-        forecast_fisher_first_derivs = []
-        forecast_fisher_first_derivs_function_values = []
-        forecast_fisher_second_derivs = []
-        forecast_fisher_cross_second_derivs = [[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)]
-        # Initialise lists of derivatives
+        add_on = 0
+        for na in range(0,len(toy_model_space)): 
+            for nb in range(na,len(toy_model_space)):
+                if toy_model_space_matrices:
+                    lnB_centre = self.abslnB_analytic_utility_func(chains_best_fit_point,forecast_fisher_centre,toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]])
+                else:
+                    lnB_centre = self.abslnB_analytic_utility_func(chains_best_fit_point,forecast_fisher_centre,toy_model_space[na],toy_model_space[nb])
+                exlnB_centre[nb-na+add_on] = lnB_centre
+            add_on += len(toy_model_space)-na
+        # Evaluate the utilities at the central values - this includes summing over the expected Bayes factors all possible model pairs specified in the toy model space
+
+        DKL_second_derivs = [[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)]
+        abslnB_second_derivs = [[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)]
+        DKL_fourth_derivs = [[[[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)] for k in range(0,dimension_number)] for l in range(0,dimension_number)]
+        abslnB_fourth_derivs = [[[[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)] for k in range(0,dimension_number)] for l in range(0,dimension_number)]
+        single_forward_displaced_forecast_fisher_matrices = [np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)]
+        forward_displaced_forecast_fisher_matrices = [[np.zeros((dimension_number,dimension_number)) for i in range(0,dimension_number)] for j in range(0,dimension_number)]
+        # Initialise lists of utility derivatives and displaced forecast Fisher matrices to calculate the estimates
         
         stepsizes_list = []
         for i in range(0,dimension_number):
@@ -288,101 +315,68 @@ class foxi:
         # Create list of stepsize vectors for quick addition
 
         for i in range(0,dimension_number):
-            f_lower2 = self.fisher_matrix_function(chains_best_fit_point-(2.0*stepsizes_list[i])) 
-            f_lower1 = self.fisher_matrix_function(chains_best_fit_point-(1.0*stepsizes_list[i]))
-            f_upper1 = self.fisher_matrix_function(chains_best_fit_point+(1.0*stepsizes_list[i]))
-            f_upper2 = self.fisher_matrix_function(chains_best_fit_point+(2.0*stepsizes_list[i]))
-            # Loop over the number of dimensions and compute the forecast Fisher matrices of the stencil
-
-            forecast_fisher_first_derivs_function_values.append([f_lower2,f_lower1,f_upper1,f_upper2])
-            # Store the values in order to calculate the cross-derivatives later 
-
-            forecast_fisher_first_derivs.append(self.FPS_derivative(1,stepsizes[i],f_lower2,f_lower1,forecast_fisher_centre,f_upper1,f_upper2))
-            forecast_fisher_second_derivs.append(self.FPS_derivative(2,stepsizes[i],f_lower2,f_lower1,forecast_fisher_centre,f_upper1,f_upper2)) 
-            # Set the value of the first and second derivative matrices - the latter corresponding to the D_iD_i derivative           
-
-        for i in range(0,dimension_number):
-            for j in range(i+1,dimension_number):  
-            # Use a scheme that recomputes the minimum number of components for the cross-derivatives
-                f_lower_lower = self.fisher_matrix_function(chains_best_fit_point-stepsizes_list[i]-stepsizes_list[j]) 
-                f_upper_upper = self.fisher_matrix_function(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j])
-                cross_derivative = (f_upper_upper+(2.0*forecast_fisher_centre)+f_lower_lower-forecast_fisher_first_derivs_function_values[i][1]-forecast_fisher_first_derivs_function_values[i][2]-forecast_fisher_first_derivs_function_values[j][1]-forecast_fisher_first_derivs_function_values[j][2])/(2.0*stepsizes[i]*stepsizes[j]) 
-                forecast_fisher_cross_second_derivs[i][j] = cross_derivative 
-                forecast_fisher_cross_second_derivs[j][i] = cross_derivative  
-                # Add in the off-diagonal components of the derivative matrix                 
-
-        for i in range(0,dimension_number): forecast_fisher_cross_second_derivs[i][i] = forecast_fisher_second_derivs[i]
-        # Add in the diagonal component of the derivative matrix
-
-        DKL_centre = 0.5*(np.log(np.linalg.det(np.linalg.inv(chains_fisher_matrix)*(chains_fisher_matrix+forecast_fisher_centre))) - dimension_number + np.trace(chains_fisher_matrix*np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre))) 
-        SUMexlnB_centre = 0.0
-        exlnB_centre = [0.0 for npairs in range(0,len(toy_model_space)*(len(toy_model_space)-1)/2 + len(toy_model_space))]
-        add_on = 0
-        for na in range(0,len(toy_model_space)): 
-            for nb in range(na,len(toy_model_space)):
-                if toy_model_space_matrices:
-                    lnB_centre = np.abs(0.5*(np.log(np.linalg.det(np.identity(dimension_number)+(np.linalg.inv(toy_model_space_matrices[nb])*forecast_fisher_centre))/np.linalg.det(np.identity(dimension_number)+(np.linalg.inv(toy_model_space_matrices[na])*forecast_fisher_centre)))+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
-                else:
-                    lnB_centre = np.abs(0.5*(np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[nb]-chains_best_fit_point))) - np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_centre,(toy_model_space[na]-chains_best_fit_point)))))
-                SUMexlnB_centre += lnB_centre
-                exlnB_centre[nb-na+add_on] = lnB_centre
-            add_on += len(toy_model_space)-na
-        # Evaluate the utilities at the central values - this includes summing over the expected Bayes factors all possible model pairs specified in the toy model space
+            single_forward_displaced_forecast_fisher_matrices[i] = self.fisher_matrix_function(chains_best_fit_point+stepsizes_list[i])
+            for j in range(0,dimension_number):
+                forward_displaced_forecast_fisher_matrices[i][j] = self.fisher_matrix_function(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j])
+        # This step should take the longest amount of time when the Fisher forecast is a substantial subroutine 
 
         exDKLest = DKL_centre 
-        SUMexlnBest = SUMexlnB_centre
         exDKLest_som = 0.0 
-        SUMexlnBest_som = 0.0
         exlnBest = [exlnB_centre[npairs] for npairs in range(0,len(exlnB_centre))]
         exlnBest_som = [0.0 for npairs in range(0,len(exlnB_centre))]
         # Initialise sums for the estimated expected utilities with their central values and the second centred-moments (som) to zero
 
         for i in range(0,dimension_number):
             for j in range(0,dimension_number):
-            # Compute the expected utilty estimates with the fisher matrices
-            # As above, this is a super-slow method of looping - more efficient to use tensor contractions in python but 
-            # will leave this to a later update in the case where the number of dimensions is very large
-                traceterm = np.trace((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_cross_second_derivs[i][j]) - ((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) +((2.0*chains_fisher_matrix)*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**3.0)*(forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])) + (np.linalg.inv(chains_fisher_matrix)*(np.linalg.inv(np.linalg.inv(chains_fisher_matrix)+ np.linalg.inv(forecast_fisher_centre))**2.0))[i][j]
-                traceterm_som = np.trace(((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_first_derivs[i]) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i])))*np.trace(((np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)*forecast_fisher_first_derivs[j]) - (chains_fisher_matrix*(np.linalg.inv(chains_fisher_matrix+forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j])))
-                exDKLest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*traceterm
-                exDKLest_som += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*traceterm_som
-                # Compute the estimated expected Kullback-Liebler divergence ij-component and then add it to the total contribution
+            # Loop over fiducial point derivatives
 
-                SUMexlnBestij = 0.0
-                SUMexlnBestij_som = 0.0
+                DKL_first_derivsi = (self.DKL_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],chains_fisher_matrix,chains_best_fit_point,dimension_number)-DKL_centre)/stepsizes[i]
+
+                DKL_first_derivsj = (self.DKL_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],chains_fisher_matrix,chains_best_fit_point,dimension_number)-DKL_centre)/stepsizes[j]
+
+                DKL_second_derivs = (self.DKL_analytic_utility_func(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j],forward_displaced_forecast_fisher_matrices[i][j],chains_fisher_matrix,chains_best_fit_point,dimension_number)+DKL_centre-self.DKL_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],chains_fisher_matrix,chains_best_fit_point,dimension_number)-self.DKL_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],chains_fisher_matrix,chains_best_fit_point,dimension_number))/(stepsizes[i]*stepsizes[j])
+                # Forward-biased numerical derivative - this minimises the number of forecasts required for the Fisher matrix 
+ 
+                exDKLest += 0.5*np.linalg.inv(chains_fisher_matrix)[i][j]*DKL_second_derivs 
+                exDKLest_som += np.linalg.inv(chains_fisher_matrix)[i][j]*DKL_first_derivsi*DKL_first_derivsj
+
                 add_on = 0
                 for na in range(0,len(toy_model_space)): 
                     for nb in range(na,len(toy_model_space)):
+                    # Loop over the number of model pairs + the number of models (coming from the null pairs: 'model_i-model_i')
                         if toy_model_space_matrices:
-                            lnBestij = np.abs(np.trace((((np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)**2.0)-(np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)**2.0))*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])+((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)))*forecast_fisher_cross_second_derivs[i][j]) + np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(((((np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])-(2.0*(np.linalg.inv(forecast_fisher_centre)**3.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])))*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0,toy_model_space[nb]-chains_best_fit_point)) - np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(((((np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_cross_second_derivs[i][j])-(2.0*(np.linalg.inv(forecast_fisher_centre)**3.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])))*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0,toy_model_space[na]-chains_best_fit_point)) + np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(2.0*((np.linalg.inv(forecast_fisher_centre)**4.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**3.0,toy_model_space[nb]-chains_best_fit_point)) - np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(2.0*((np.linalg.inv(forecast_fisher_centre)**4.0)*forecast_fisher_first_derivs[i]*forecast_fisher_first_derivs[j])*np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**3.0,toy_model_space[na]-chains_best_fit_point)) + 4.0*np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)[i] - 4.0*np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)[i] + (2.0*((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)))-(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)))))[i][j])
-                            lnBestij_som = np.abs(((np.trace((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)*(forecast_fisher_first_derivs[i]))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)*(forecast_fisher_first_derivs[i]))))+2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[na]-chains_best_fit_point)[i]-2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[nb]-chains_best_fit_point)[i]+2.0*np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point))-2.0*np.dot(toy_model_space[na]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point)))*((np.trace((np.linalg.inv(toy_model_space_matrices[nb]+forecast_fisher_centre)*(forecast_fisher_first_derivs[j]))-(np.linalg.inv(toy_model_space_matrices[na]+forecast_fisher_centre)*(forecast_fisher_first_derivs[j]))))+2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[na]-chains_best_fit_point)[j]-2.0*np.dot(np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre)),toy_model_space[nb]-chains_best_fit_point)[j]+2.0*np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[nb])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point))-2.0*np.dot(toy_model_space[na]-chains_best_fit_point,np.dot((np.linalg.inv(np.linalg.inv(toy_model_space_matrices[na])+np.linalg.inv(forecast_fisher_centre))**2.0)*(np.linalg.inv(forecast_fisher_centre)**2.0)*forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point))))
-                        else:
-                            lnBestij = np.abs((4.0*np.dot(forecast_fisher_first_derivs[i],(toy_model_space[na]-toy_model_space[nb])))[j]+np.dot((toy_model_space[nb]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[nb]-chains_best_fit_point)))-np.dot((toy_model_space[na]-chains_best_fit_point),np.dot(forecast_fisher_cross_second_derivs[i][j],(toy_model_space[na]-chains_best_fit_point))))
-                            lnBestij_som = np.abs(((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[i])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[i],toy_model_space[na]-chains_best_fit_point))))*((2.0*np.dot(forecast_fisher_centre,toy_model_space[na]-toy_model_space[nb])[j])+(np.dot(toy_model_space[nb]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[nb]-chains_best_fit_point)))-(np.dot(toy_model_space[na]-chains_best_fit_point,np.dot(forecast_fisher_first_derivs[j],toy_model_space[na]-chains_best_fit_point)))))    
-                # Compute the estimated expected ln Bayes factor (and its second moment contribution) averaged over the whole model space ij-component and then add it to the total contribution
-                        exlnBest[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij
-                        exlnBest_som[nb-na+add_on] += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*lnBestij_som
-                        SUMexlnBestij += lnBestij
-                        SUMexlnBestij_som += lnBestij_som
-                    add_on += len(toy_model_space)-na
-                
-                SUMexlnBest += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*SUMexlnBestij
-                SUMexlnBest_som += 0.25*np.linalg.inv(chains_fisher_matrix)[i][j]*SUMexlnBestij_som
-                # Add this ij-contribution to the total   
+                            abslnB_first_derivsi = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]])-exlnB_centre[nb-na+add_on])/stepsizes[i]
+                            abslnB_first_derivsj = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]])-exlnB_centre[nb-na+add_on])/stepsizes[j]
 
-        print('<DKL> estimate: ' + str(exDKLest) + ' + O(F^{-2}) terms') 
-        print('< (DKL-<DKL>)^2 > estimate: ' + str(exDKLest_som) + ' + O(F^{-2}) terms') 
-        print('Sum_i <|lnB|>_i estimate: ' + str(SUMexlnBest) + ' + O(F^{-2}) terms') 
-        print('Sum_i < (|lnB|_i - <|lnB|>_i)^2 > estimate: ' + str(SUMexlnBest_som) + ' + O(F^{-2}) terms')
+                            abslnB_second_derivs = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j],forward_displaced_forecast_fisher_matrices[i][j],toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]])+exlnB_centre[nb-na+add_on]-self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]])-self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],toy_model_space[na],toy_model_space[nb],model_matrices=[toy_model_space_matrices[na],toy_model_space_matrices[nb]]))/(stepsizes[i]*stepsizes[j])
+                        else:
+                            abslnB_first_derivsi = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],toy_model_space[na],toy_model_space[nb])-exlnB_centre[nb-na+add_on])/stepsizes[i]
+                            abslnB_first_derivsj = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],toy_model_space[na],toy_model_space[nb])-exlnB_centre[nb-na+add_on])/stepsizes[j]
+
+                            abslnB_second_derivs = (self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i]+stepsizes_list[j],forward_displaced_forecast_fisher_matrices[i][j],toy_model_space[na],toy_model_space[nb])+exlnB_centre[nb-na+add_on]-self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[i],single_forward_displaced_forecast_fisher_matrices[i],toy_model_space[na],toy_model_space[nb])-self.abslnB_analytic_utility_func(chains_best_fit_point+stepsizes_list[j],single_forward_displaced_forecast_fisher_matrices[j],toy_model_space[na],toy_model_space[nb]))/(stepsizes[i]*stepsizes[j])
+                        # Estimate using either a Gaussian for each model or a Dirac delta
+
+                        exlnBest[nb-na+add_on] += 0.5*np.linalg.inv(chains_fisher_matrix)[i][j]*abslnB_second_derivs
+                        exlnBest_som[nb-na+add_on] += np.linalg.inv(chains_fisher_matrix)[i][j]*abslnB_first_derivsi*abslnB_first_derivsj
+                    add_on += len(toy_model_space)-na
+
+        exDKLest_F2 = exDKLest
+        exlnBest_F2 = exlnBest
+        exDKLest_som_F2 = exDKLest_som
+        exlnBest_som_F2 = exlnBest_som
+        # Store the O(F^{-2}) estimated utilities    
+
+        print('<DKL> estimate: ' + str(exDKLest_F2) + ' + O(F^{-2}) terms')
+        print('< (DKL-<DKL>)^2 > estimate: ' + str(exDKLest_som_F2) + ' + O(F^{-2}) terms')
         for npairs in range(0,len(exlnBest)):
-            print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest[npairs]) + ' + O(F^{-2}) terms')
-            print('< (|lnB|_' + str(npairs) + ' - <|lnB|>_' + str(npairs) + ')^2 >' + ' estimate: ' + str(exlnBest_som[npairs]) + ' + O(F^{-2}) terms')
+            print('<|lnB|>_' + str(npairs) + ' estimate: ' + str(exlnBest_F2[npairs]) + ' + O(F^{-2}) terms')
+            print('< (|lnB|_' + str(npairs) + ' - <|lnB|>_' + str(npairs) + ')^2 >' + ' estimate: ' + str(exlnBest_som_F2[npairs]) + ' + O(F^{-2}) terms')
         # Return the results in terminal output form
 
         if as_a_function == True:
-            return [exDKLest,exDKLest_som,SUMexlnBest,SUMexlnBest_som,exlnBest,exlnBest_som] 
-            # If 'as_a_function' is True then output the results in a list             
-
+            return [exDKLest_F2,exDKLest_som_F2,exlnBest_F2,exlnBest_som_F2] 
+            # If 'as_a_function' is True then output the results in a list                     
+           
 
     def decide_on_best_computation(self,ML_point,samples_model_ML,kde_model_ML,samples_model_evidence,error_vector,ML_threshold,fiducial_point_vector,forecast_data_function,model_index):
     # Decide on and output the best computation available for both the Maximum Likelihood and Evidence for a given model     

@@ -3,6 +3,7 @@
 ### Futuristic Observations and their eXpected Information
 
 <a href="http://ascl.net/1806.030"><img src="https://img.shields.io/badge/ascl-1806.030-blue.svg?colorB=262255" alt="ascl:1806.030" /></a>
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4680036.svg)](https://doi.org/10.5281/zenodo.4680036)
 
 This python package computes a suite of expected utilities which are based on information theory and Bayesian inference, given futuristic observations, in a flexible and user-friendly way. For example, in principle, all one needs to make use of **foxi** is a set of n-dim prior samples for each model and one set of n-dim samples from the current data. 
 

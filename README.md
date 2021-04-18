@@ -27,8 +27,7 @@ To fork, simply type into the terminal:
 
 > git clone https://github.com/umbralcalc/foxi.git 
 
-In the `/foxiscripts` directory there is an ipython notebook with a worked 5-dimensional example available: 
-[https://github.com/umbralcalc/foxi/tree/master/foxiscripts/5D_example.ipynb]. 
+In the `/foxiscripts` directory there is an ipython notebook with a worked 5-dimensional example available [here](https://github.com/umbralcalc/foxi/tree/master/foxiscripts/5D_example.ipynb). 
 This demonstrates most of the main features within the `foxi` class.
 
 

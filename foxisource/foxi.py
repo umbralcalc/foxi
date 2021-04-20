@@ -1,12 +1,5 @@
 import numpy as np
-import matplotlib as mpl
-
-mpl.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import rc
-
-rc("text", usetex=True)
-rc("text.latex", preamble=r"\usepackage{mathrsfs}")
 import pylab as pl
 import matplotlib.cm as cm
 import corner
@@ -35,7 +28,6 @@ class foxi:
         self.chains_directory = "foxichains/"
         self.priors_directory = "foxipriors/"
         self.output_directory = "foxioutput/"
-        self.plots_directory = "foxiplots/"
         self.source_directory = "foxisource/"
         # These can be changed above if they are annoying :-) I did get carried away...
         self.gaussian_forecast
@@ -786,7 +778,7 @@ class foxi:
             number_of_model_pairs = len(self.model_name_list)
             # The number of models where the utility reference model is element 0
         if mix_models == True:
-            number_of_model_pairs = len(self.model_name_list) + (
+            number_of_model_pairs = len(self.model_name_list) + int(
                 (len(self.model_name_list)) * (len(self.model_name_list) - 1) / 2
             )
             # The number of possible model pairs to be computed, making use of Binomial Theorem
@@ -1192,7 +1184,7 @@ class foxi:
             # Initialize output file
 
         if mix_models == True:
-            possible_model_pairs = len(self.model_name_list) + (
+            possible_model_pairs = len(self.model_name_list) + int(
                 (len(self.model_name_list)) * (len(self.model_name_list) - 1) / 2
             )
             # The number of possible distinct model pairs, making use of Binomial Theorem
@@ -2071,19 +2063,8 @@ class foxi:
                     item.set_fontsize(self.fontsize)
                 # User settings for the font size
 
-                new_fig.savefig(
-                    self.path_to_foxi_directory
-                    + "/"
-                    + self.plots_directory
-                    + "foxiplot_2DHist_"
-                    + str(i)
-                    + ".pdf",
-                    format="pdf",
-                    bbox_inches="tight",
-                    pad_inches=0.1,
-                    dpi=300,
-                )
-                # Saving output to foxiplots/
+                new_fig.show()
+                # Display plot
 
         if corner_plot == True:
             print("Using the corner module: https://pypi.python.org/pypi/corner/")
@@ -2099,17 +2080,8 @@ class foxi:
             )
             # Use corner to plot the samples
 
-            figure.savefig(
-                self.path_to_foxi_directory
-                + "/"
-                + self.plots_directory
-                + "foxiplot.pdf",
-                format="pdf",
-                bbox_inches="tight",
-                pad_inches=0.1,
-                dpi=300,
-            )
-        # Saving output to foxiplots/
+            figure.show()
+            # Display plot
 
     def plot_convergence(
         self,
@@ -2199,7 +2171,7 @@ class foxi:
             )
             axes[1, 1].plot(tot_number_of_samples, np.asarray(tot_decisivity).T[nm])
             axes[1, 1].set_title(
-                r"$\mathscr{D}_{\beta \gamma}$", fontsize=self.fontsize
+                r"deci$({\beta \gamma})$", fontsize=self.fontsize
             )
             axes[0, 2].plot(
                 tot_number_of_samples, np.asarray(tot_expected_abslnB_ML).T[nm]
@@ -2210,7 +2182,7 @@ class foxi:
             )
             axes[1, 2].plot(tot_number_of_samples, np.asarray(tot_decisivity_ML).T[nm])
             axes[1, 2].set_title(
-                r"$\mathscr{D}_{\beta \gamma}\vert_{{}_{\rm ML}}$",
+                r"deci$({\beta \gamma})_{{}_{\rm ML}}$",
                 fontsize=self.fontsize,
             )
             axes[1, 0].plot(
@@ -2219,17 +2191,8 @@ class foxi:
             axes[1, 0].set_title(r"$r_{{}_\mathrm{ML}}$", fontsize=self.fontsize)
 
         fig.subplots_adjust(hspace=0.4, wspace=0.4)
-        fig.savefig(
-            self.path_to_foxi_directory
-            + "/"
-            + self.plots_directory
-            + "foxiplot_convergence.pdf",
-            format="pdf",
-            bbox_inches="tight",
-            pad_inches=0.1,
-            dpi=300,
-        )
-        # Saving output to foxiplots/
+        fig.show()
+        # Display plot
 
     def flashy_foxi(self):  # Just some front page propaganda...
         print("                                          ")
